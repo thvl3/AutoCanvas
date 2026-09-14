@@ -9,6 +9,10 @@ import { BridgeClient } from "../bridge/client.js";
 import { createServer } from "../mcp/server.js";
 import { parseTool } from "../services/tools.js";
 import { publicData } from "../services/academic.js";
+import { startDashboard } from "../ui/dashboard.js";
+import { spawn } from "node:child_process";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
 dotenv({ quiet: true });
 const program = new Command()
   .name("canvas-mcp")
@@ -214,6 +218,97 @@ program
       void close();
     });
     await server.connect(new StdioServerTransport());
+  });
+program
+  .command("ui")
+  .description("Open the local status dashboard in your browser")
+  .action(async () => {
+    const config = loadConfig(process.env);
+    const settings = bridgeSettings(config);
+    const client = new BridgeClient(settings);
+    let bridge: Awaited<ReturnType<typeof startBridge>> | undefined;
+    try {
+      await client.status();
+    } catch {
+      bridge = await startBridge(settings);
+    }
+    const app = createApp(process.env, program.opts().demo === true);
+    const viaNode = /dist[\\/]cli[\\/]index\.js$/.test(
+      (process.argv[1] ?? "").replace(/\\/g, "/"),
+    );
+    const command = viaNode ? "node" : process.execPath;
+    const args = viaNode ? [resolve(process.argv[1]!), "serve"] : ["serve"];
+    const snippet = {
+      command,
+      args,
+      env: {
+        CANVAS_BASE_URL: config.baseUrl,
+        CANVAS_PROVIDER: "browser",
+        CANVAS_DB_PATH: config.dbPath,
+        CANVAS_WORKSPACE_ROOT: config.workspaceRoot,
+      },
+    };
+    const home = homedir();
+    const claude =
+      process.platform === "win32"
+        ? join(
+            process.env.APPDATA ?? join(home, "AppData", "Roaming"),
+            "Claude",
+            "claude_desktop_config.json",
+          )
+        : process.platform === "darwin"
+          ? join(
+              home,
+              "Library",
+              "Application Support",
+              "Claude",
+              "claude_desktop_config.json",
+            )
+          : join(home, ".config", "Claude", "claude_desktop_config.json");
+    const files = [
+      { tool: "Claude Desktop", file: claude, key: "mcpServers.canvas" },
+      { tool: "Cursor", file: join(home, ".cursor", "mcp.json"), key: "mcpServers.canvas" },
+      { tool: "Codex", file: join(home, ".codex", "config.toml"), key: "[mcp_servers.canvas]" },
+      { tool: "ChatGPT Desktop", file: "mcpServers JSON (app-managed)", key: "mcpServers.canvas" },
+    ];
+    const dashboard = await startDashboard({
+      status: async () => client.status(),
+      health: async () => app.provider.healthCheck(),
+      pair: async () => client.pair(),
+      mcp: () => ({ snippet, files }),
+    });
+    console.log(`Dashboard: ${dashboard.url}`);
+    console.log("Keep this process running; press Ctrl+C to stop.");
+    const opener =
+      process.platform === "win32"
+        ? "cmd"
+        : process.platform === "darwin"
+          ? "open"
+          : "xdg-open";
+    const openArgs =
+      process.platform === "win32"
+        ? ["/c", "start", "", dashboard.url]
+        : [dashboard.url];
+    try {
+      const child = spawn(opener, openArgs, { stdio: "ignore", detached: true });
+      child.unref();
+    } catch {
+      /* the URL is printed above regardless */
+    }
+    let closed = false;
+    const close = async () => {
+      if (closed) return;
+      closed = true;
+      await dashboard.close();
+      if (bridge) await bridge.close();
+      app.close();
+    };
+    process.once("SIGINT", () => {
+      void close();
+    });
+    process.once("SIGTERM", () => {
+      void close();
+    });
   });
 program.parseAsync().catch((error) => {
   let message = error instanceof Error ? error.message : "Command failed";

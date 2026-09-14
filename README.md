@@ -86,6 +86,8 @@ node dist/cli/index.js upcoming --days 7
 
 `auth status` reports browser/extension/session health. If Canvas needs login, sign in normally and retry. If the extension is disconnected, check the bridge and extension options. `bridge pair` issues a fresh pairing code when the old one expires.
 
+A local dashboard is available with `ui`: it opens in your browser and shows live connection status, the current pairing code (with one-click regeneration), and a copy-paste MCP config snippet for Claude Desktop, Cursor, Codex, or ChatGPT Desktop. The release binary exposes the same command (`./canvas-mcp-windows-x64.exe ui`).
+
 `courses` queries the provider live. Other academic commands normally read SQLite; sync first. Results include freshness. Partial sync retains previous data and reports warnings rather than turning unavailable content into an empty collection. Use `debug graphql-schema` to inspect available GraphQL type fields through the signed-in browser.
 
 ## MCP connection
