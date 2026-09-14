@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync, statSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import Database from "better-sqlite3";
+import { DatabaseSync } from "node:sqlite";
 import { Repository } from "../src/db/repository.js";
 import type { Entity, EntityKind } from "../src/domain/types.js";
 
@@ -160,7 +160,7 @@ describe("Repository", () => {
     expect(r.recentChanges("9999-01-01T00:00:00Z")).toEqual([]);
     expect(r.recentChanges(undefined, 1)).toHaveLength(1);
   });
-  it("persists entities in migrated indexed SQLite tables with real native binding", () => {
+  it("persists entities in migrated indexed SQLite tables with the built-in SQLite module", () => {
     const path = disk();
     const r = repo(path);
     expect(r.upsert(entity())).toBe("added");
@@ -168,8 +168,11 @@ describe("Repository", () => {
     r.close();
     const reopened = repo(path);
     expect(reopened.get("assignments", "1", "10")).toEqual(entity());
-    const native = new Database(path);
-    expect(native.pragma("user_version", { simple: true })).toBe(1);
+    const native = new DatabaseSync(path);
+    expect(
+      (native.prepare("PRAGMA user_version").get() as { user_version: number })
+        .user_version,
+    ).toBe(1);
     const tables = native
       .prepare("SELECT name FROM sqlite_master WHERE type='table'")
       .all() as { name: string }[];

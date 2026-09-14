@@ -6,10 +6,21 @@ Normal use relies on your existing Canvas browser login. No Canvas personal acce
 
 ## Requirements
 
-- Node.js 22.12+, pnpm 9.15.9
+- Node.js 22.13+ and pnpm 9.15.9 (source builds only)
 - Firefox or a Chromium browser with an authenticated Canvas tab
-- Linux, macOS, or Windows. Workspace creation uses descriptor-relative traversal on Linux/macOS and a documented path walk on Windows; no `/proc` or WSL is required.
-- A C/C++ build toolchain and Python 3 if SQLite's native binding needs compilation
+- Linux, macOS, or Windows. Workspace creation uses descriptor-relative traversal on Linux/macOS and a documented path walk on Windows; no `/proc` or WSL is required. SQLite uses Node's built-in module, so there are no native add-ons to compile.
+
+## Releases
+
+Each tagged release (`v*`) attaches prebuilt single-file executables for Linux x64, macOS arm64, and Windows x64. Download `canvas-mcp-<os>-<arch>[.exe]` and use it in place of `node dist/cli/index.js` — no Node or pnpm install required:
+
+```sh
+./canvas-mcp-linux-x64 bridge start
+./canvas-mcp-linux-x64 sync
+./canvas-mcp-windows-x64.exe serve      # as a stdio MCP server
+```
+
+For an MCP host, register the executable directly: `command` is the binary path, `args` is `["serve"]`, and `env` carries the same absolute `CANVAS_DB_PATH` / `CANVAS_WORKSPACE_ROOT` as the source build.
 
 ## Setup
 

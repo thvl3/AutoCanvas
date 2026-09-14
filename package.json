@@ -8,7 +8,7 @@
     "canvas-mcp": "dist/cli/index.js"
   },
   "engines": {
-    "node": ">=22.12.0"
+    "node": ">=22.13.0"
   },
   "packageManager": "pnpm@9.15.9",
   "scripts": {
@@ -19,6 +19,7 @@
     "check": "pnpm typecheck && pnpm test && pnpm build",
     "smoke": "node scripts/smoke.mjs",
     "setup": "node scripts/install.mjs",
+    "release:build": "node scripts/build-release.mjs",
     "extension:build": "node scripts/build-extension.mjs",
     "extension:watch": "node scripts/build-extension.mjs --watch",
     "lint": "prettier --check src tests scripts browser-extension/src package.json tsconfig.json"
@@ -26,7 +27,6 @@
   "dependencies": {
     "@modelcontextprotocol/client": "^2.0.0",
     "@modelcontextprotocol/server": "^2.0.0",
-    "better-sqlite3": "^13.0.3",
     "commander": "^15.0.0",
     "dotenv": "^17.4.2",
     "graphql": "^17.0.2",
@@ -36,13 +36,13 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^9.6.0",
     "@types/chrome": "^0.2.9",
     "@types/node": "^26.5.1",
     "@types/turndown": "^5.0.6",
     "@types/ws": "^8.18.1",
     "esbuild": "^0.28.2",
     "playwright": "^1.63.0",
+    "postject": "1.0.0-alpha.6",
     "prettier": "^3.9.6",
     "tsx": "^4.23.13",
     "typescript": "^7.0.2",

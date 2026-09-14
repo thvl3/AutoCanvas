@@ -1,6 +1,6 @@
-import Database from "better-sqlite3";
 import { closeSync, mkdirSync, openSync } from "node:fs";
 import { dirname } from "node:path";
+import { DatabaseSync, transaction } from "./sqlite.js";
 import type { Entity, EntityKind } from "../domain/types.js";
 import { ENTITY_KINDS, migrate } from "./migrations.js";
 import { changedFields } from "./canonical.js";
@@ -30,7 +30,8 @@ type Row = {
 };
 
 export class Repository {
-  private readonly db: Database.Database;
+  private readonly db: DatabaseSync;
+  private closed = false;
   constructor(path: string, identity?: string) {
     if (path !== ":memory:") {
       // Set restrictive modes at creation, never chmod a preexisting shared directory.
@@ -41,10 +42,10 @@ export class Repository {
         if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
       }
     }
-    this.db = new Database(path);
+    this.db = new DatabaseSync(path);
     try {
-      this.db.pragma("journal_mode = WAL");
-      this.db.pragma("busy_timeout = 5000");
+      this.db.exec("PRAGMA journal_mode = WAL");
+      this.db.exec("PRAGMA busy_timeout = 5000");
       migrate(this.db);
       if (identity !== undefined) this.bindIdentity(identity);
     } catch (error) {
@@ -54,60 +55,50 @@ export class Repository {
   }
   bindIdentity(identity: string): void {
     if (!identity.trim()) throw new Error("Cache identity cannot be empty");
-    this.db
-      .transaction(() => {
-        const prior = this.syncState().identity;
-        if (prior !== undefined && prior !== identity)
-          throw new Error(
-            "Cache identity mismatch; use a separate cache for this Canvas account",
-          );
-        this.setSyncState("identity", identity);
-      })
-      .immediate();
+    transaction(this.db, "BEGIN IMMEDIATE", () => {
+      const prior = this.syncState().identity;
+      if (prior !== undefined && prior !== identity)
+        throw new Error(
+          "Cache identity mismatch; use a separate cache for this Canvas account",
+        );
+      this.setSyncState("identity", identity);
+    });
   }
   bindUserIdentity(userId: string): void {
     if (!userId.trim()) throw new Error("Canvas user identity cannot be empty");
-    this.db
-      .transaction(() => {
-        const prior = this.syncState().user_id;
-        if (prior !== undefined && prior !== userId)
-          throw new Error("Cache user identity mismatch; use a separate cache");
-        this.setSyncState("user_id", userId);
-      })
-      .immediate();
+    transaction(this.db, "BEGIN IMMEDIATE", () => {
+      const prior = this.syncState().user_id;
+      if (prior !== undefined && prior !== userId)
+        throw new Error("Cache user identity mismatch; use a separate cache");
+      this.setSyncState("user_id", userId);
+    });
   }
   acquireSyncLease(owner: string, ttlMs = 120_000, now = Date.now()): boolean {
-    return this.db
-      .transaction(() => {
-        const lease = this.syncState()._lease as
-          { owner: string; expires_at: number } | undefined;
-        if (lease && lease.owner !== owner && lease.expires_at > now)
-          return false;
-        this.setSyncState("_lease", { owner, expires_at: now + ttlMs });
-        return true;
-      })
-      .immediate();
+    return transaction(this.db, "BEGIN IMMEDIATE", () => {
+      const lease = this.syncState()._lease as
+        { owner: string; expires_at: number } | undefined;
+      if (lease && lease.owner !== owner && lease.expires_at > now)
+        return false;
+      this.setSyncState("_lease", { owner, expires_at: now + ttlMs });
+      return true;
+    });
   }
   renewSyncLease(owner: string, ttlMs = 120_000, now = Date.now()): boolean {
-    return this.db
-      .transaction(() => {
-        const lease = this.syncState()._lease as
-          { owner: string; expires_at: number } | undefined;
-        if (!lease || lease.owner !== owner || lease.expires_at <= now)
-          return false;
-        this.setSyncState("_lease", { owner, expires_at: now + ttlMs });
-        return true;
-      })
-      .immediate();
+    return transaction(this.db, "BEGIN IMMEDIATE", () => {
+      const lease = this.syncState()._lease as
+        { owner: string; expires_at: number } | undefined;
+      if (!lease || lease.owner !== owner || lease.expires_at <= now)
+        return false;
+      this.setSyncState("_lease", { owner, expires_at: now + ttlMs });
+      return true;
+    });
   }
   releaseSyncLease(owner: string): void {
-    this.db
-      .transaction(() => {
-        const lease = this.syncState()._lease as { owner: string } | undefined;
-        if (lease?.owner === owner)
-          this.db.prepare("DELETE FROM sync_state WHERE key=?").run("_lease");
-      })
-      .immediate();
+    transaction(this.db, "BEGIN IMMEDIATE", () => {
+      const lease = this.syncState()._lease as { owner: string } | undefined;
+      if (lease?.owner === owner)
+        this.db.prepare("DELETE FROM sync_state WHERE key=?").run("_lease");
+    });
   }
   syncState(): Record<string, unknown> {
     const rows = this.db
@@ -168,7 +159,7 @@ export class Repository {
     entities: Entity[],
   ): CollectionCounts {
     const table = this.table(kind);
-    return this.db.transaction(() => {
+    return transaction(this.db, "BEGIN", () => {
       const ids = new Set<string>();
       const counts: CollectionCounts = {
         added: 0,
@@ -193,10 +184,10 @@ export class Repository {
         counts.removed++;
       }
       return counts;
-    })();
+    });
   }
   upsert(entity: Entity): "added" | "updated" | "unchanged" {
-    return this.db.transaction(() => {
+    return transaction(this.db, "BEGIN", () => {
       const old = this.get(entity.kind, entity.id, entity.course_id ?? "");
       const fields = old
         ? changedFields(old, entity)
@@ -218,7 +209,7 @@ export class Repository {
         );
       if (change !== "unchanged") this.recordChange(entity, change, fields);
       return change;
-    })();
+    });
   }
   private recordChange(
     entity: Entity,
@@ -255,6 +246,8 @@ export class Repository {
     }));
   }
   close(): void {
-    if (this.db.open) this.db.close();
+    if (this.closed) return;
+    this.closed = true;
+    this.db.close();
   }
 }

@@ -2,7 +2,7 @@
 
 ## Commands
 
-Use Node 22.12+ and pnpm 9.15.9. The lockfile is authoritative.
+Use Node 22.13+ and pnpm 9.15.9. The lockfile is authoritative. SQLite is Node's built-in `node:sqlite` (`DatabaseSync`), not `better-sqlite3`, so there are no native add-ons and no C/C++ toolchain is needed.
 
 ```sh
 pnpm install --frozen-lockfile
