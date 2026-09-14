@@ -36,6 +36,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      AMO_API_KEY: ${{ secrets.AMO_API_KEY }}
+      AMO_API_SECRET: ${{ secrets.AMO_API_SECRET }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -52,10 +55,7 @@ jobs:
           mkdir -p release-assets
           (cd browser-extension/dist-firefox && zip -r ../../release-assets/canvas-firefox-extension.zip . -x "*.DS_Store")
       - name: Sign Firefox extension (AMO)
-        if: ${{ secrets.AMO_API_KEY != '' && secrets.AMO_API_SECRET != '' }}
-        env:
-          AMO_API_KEY: ${{ secrets.AMO_API_KEY }}
-          AMO_API_SECRET: ${{ secrets.AMO_API_SECRET }}
+        if: ${{ env.AMO_API_KEY != '' && env.AMO_API_SECRET != '' }}
         run: |
           pnpm dlx web-ext@10 sign \
             --source-dir browser-extension/dist-firefox \
