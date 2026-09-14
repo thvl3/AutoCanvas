@@ -368,7 +368,10 @@ export class SyncService {
       { event: "cache.stale", ...warning },
       "Canvas sync collection stale",
     );
-    if (status === 401) throw error;
+    // A per-course 401 must not abort the whole run: institutions hide the
+    // Files navigation tab by returning 401 on the files index even while the
+    // session is valid. The mandatory auth/courses step aborts on its own via
+    // the outer catch, so a genuinely expired session is still surfaced there.
   }
   private replace(
     kind: EntityKind,

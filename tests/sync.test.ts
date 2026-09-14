@@ -470,7 +470,7 @@ describe("SyncService", () => {
     await sync.run();
     expect(api.calls).toContain("module_items:10:m2");
   });
-  it("aborts on 401 without erasing cache and persists a failed run; account mismatch prevents collection reads", async () => {
+  it("marks a per-course 401 stale instead of aborting, but a mandatory 401 still fails the run; account mismatch prevents collection reads", async () => {
     const { repo, api, sync } = setup();
     api.collections.set("files:10", [e("files", "1")]);
     await sync.run();
@@ -479,12 +479,19 @@ describe("SyncService", () => {
       "assignments:10",
       Object.assign(new Error("Unauthorized"), { status: 401 }),
     );
-    await expect(sync.run()).rejects.toMatchObject({ status: 401 });
-    expect(api.calls).not.toContain("files:10");
+    const partial = await sync.run();
+    expect(partial.status).toBe("partial");
+    expect(api.calls).toContain("files:10"); // run continued past the 401
     expect(repo.list("files")).toHaveLength(1);
     expect(repo.syncState()).toMatchObject({
-      run: { status: "failed", completed_at: expect.any(String) },
+      run: { status: "partial" },
       "assignments:10": { status: "stale" },
+    });
+    api.failures.clear();
+    api.failures.set("auth", { status: 401 });
+    await expect(sync.run()).rejects.toMatchObject({ status: 401 });
+    expect(repo.syncState()).toMatchObject({
+      run: { status: "failed", completed_at: expect.any(String) },
     });
     api.failures.clear();
     api.user = "99";
