@@ -67,13 +67,9 @@ const exe = join(releaseDir, exeName);
 copyFileSync(process.execPath, exe);
 if (os !== "win32") chmodSync(exe, 0o755);
 execFileSync(
-  join(
-    ROOT,
-    "node_modules",
-    ".bin",
-    os === "win32" ? "postject.cmd" : "postject",
-  ),
+  process.execPath,
   [
+    join(ROOT, "node_modules", "postject", "dist", "cli.js"),
     exe,
     "NODE_SEA_BLOB",
     join(outDir, "sea-prep.blob"),
