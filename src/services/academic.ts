@@ -222,6 +222,14 @@ export class AcademicService {
         };
       case "canvas_get_study_context":
         return studyContext(this.repo, course ?? "", args as StudyOptions);
+      case "canvas_list_exams": {
+        const { listExams } = await import("./exam-context.js");
+        return page(listExams(this.repo, course));
+      }
+      case "canvas_get_exam_study_guide": {
+        const { examStudyContext } = await import("./exam-context.js");
+        return examStudyContext(this.repo, course ?? "", id, args);
+      }
       case "canvas_get_grade_summary":
         return {
           courses: this.list("courses")

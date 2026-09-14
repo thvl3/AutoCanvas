@@ -168,6 +168,24 @@ export const toolSpecs = [
       "Inspect only the assignment workspace submission directory for mechanical readiness. Rubric quality remains UNKNOWN. Does not grade or submit.",
     schema: z.object(assignment).strict(),
   },
+  {
+    name: "canvas_list_exams",
+    description:
+      "List auto-detected exam assignments (by name) with their detection reason. Use to discover exams before generating a study guide.",
+    schema: z.object({ ...course, ...paging }).strict(),
+  },
+  {
+    name: "canvas_get_exam_study_guide",
+    description:
+      "Resolve the material preceding an exam in two ordered views — taught order (module position) and deadline order (due date) — for study-guide or cheat-sheet generation. Selecting any assignment treats it as the exam (manual override of name detection). Source material only; the consuming model generates the guide.",
+    schema: z
+      .object({
+        ...assignment,
+        include_files: z.boolean().optional(),
+        include_rubric: z.boolean().optional(),
+      })
+      .strict(),
+  },
 ];
 export function parseTool(
   name: string,

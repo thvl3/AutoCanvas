@@ -44,6 +44,7 @@ List tools accept `limit` (1–500, default 100), `offset` (default 0), and wher
 | `canvas_get_missing`        | optional `course_id`                                             | Explicit missing/late flags and separately classified past-due unsubmitted or failed work |
 | `canvas_get_recent_changes` | optional `since`, `limit`; no offset                             | Capped recent events, changed fields and freshness                                        |
 | `canvas_get_grade_summary`  | optional `course_id`; no pagination                              | Actual Canvas grade fields, submission counts and risk signals                            |
+| `canvas_list_exams`         | optional `course_id`                                             | Auto-detected exam/quiz assignments (by name) with detection reason                      |
 
 Single-record tools do not take pagination arguments. Omit `course_id` only when an identifier is unambiguous in the local cache. Normalized records have `id`, `course_id`, `kind`, `title`, `updated_at` and `data`. Raw payloads remain in SQLite and are not included in MCP results.
 
@@ -54,6 +55,8 @@ Single-record tools do not take pagination arguments. Omit `course_id` only when
 The result contains `assignment`, `course`, `assignment_group`, `rubric`, `modules`, `module_items`, `related_pages`, `files`, `announcements`, `discussions`, `submission`, `external_links`, `warnings`, and `freshness`. Module metadata contains prerequisite IDs and item completion requirements when Canvas supplies them. Announcements match the assignment's link or title, not a model's guessed relevance.
 
 `canvas_get_study_context` requires `course_id` and accepts `module_ids` (up to 100), `assignment_id`, `start_date`, and `end_date`. With an assignment target and no explicit modules, it selects that assignment's containing modules. Date filters apply to assignment due dates and announcement timestamps; module readings remain included for context. The tool returns source pages, files, discussions, assignment topics and reading links. `key_concepts` is null: the server does not pretend to extract or generate concepts it has not verified.
+
+`canvas_get_exam_study_guide` requires `assignment_id` and accepts optional `course_id`, `include_files`, and `include_rubric`. It resolves the material preceding the selected exam in two ordered views: `by_module_position` (modules and items taught before the exam's module, plus items earlier in the exam's own module) and `by_due_date` (assignments due before the exam). Selecting any assignment treats it as the exam (manual override of name detection); `detection.reason` reports `name_match` or `manual_override`. Pages and files resolve through module items and may be empty when the institution hides the Files/Pages navigation tabs. The consuming model generates the guide or cheat sheet; the server returns source material only.
 
 Content is untrusted source data. Results above 2 MB are rejected with a narrowing instruction rather than silently clipped.
 

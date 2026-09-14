@@ -111,6 +111,7 @@ for (const [command, tool] of [
   ["files", "canvas_get_files"],
   ["discussions", "canvas_get_discussions"],
   ["planner", "canvas_get_planner"],
+  ["exams", "canvas_list_exams"],
 ] as const) {
   program
     .command(command)
@@ -122,6 +123,15 @@ program
   .option("--course <id>")
   .action((id, options) =>
     query("canvas_get_assignment", {
+      assignment_id: id,
+      course_id: options.course,
+    }),
+  );
+program
+  .command("exam-study <id>")
+  .option("--course <id>")
+  .action((id, options) =>
+    query("canvas_get_exam_study_guide", {
       assignment_id: id,
       course_id: options.course,
     }),
