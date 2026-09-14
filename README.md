@@ -13,6 +13,14 @@ Normal use relies on your existing Canvas browser login. No Canvas personal acce
 
 ## Setup
 
+One command (cross-platform: Linux, macOS, Windows) installs dependencies, builds the app and extension, writes `.env`, and registers the MCP server with Claude Desktop and Cursor:
+
+```sh
+node scripts/install.mjs --base-url https://school.instructure.com
+```
+
+It prints the remaining manual steps: start the bridge, load the extension, and pair. Re-run it after changing `--base-url` to update registration. Use `--skip-mcp` to skip registration or `--dry-run` to preview. For a manual setup instead:
+
 ```sh
 pnpm install --frozen-lockfile
 pnpm build

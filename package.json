@@ -18,6 +18,7 @@
     "dev": "tsx src/cli/index.ts",
     "check": "pnpm typecheck && pnpm test && pnpm build",
     "smoke": "node scripts/smoke.mjs",
+    "setup": "node scripts/install.mjs",
     "extension:build": "node scripts/build-extension.mjs",
     "extension:watch": "node scripts/build-extension.mjs --watch",
     "lint": "prettier --check src tests scripts browser-extension/src package.json tsconfig.json"
