@@ -1,9 +1,10 @@
 #!/usr/bin/env node
+import "../prelude.js";
 import { Command } from "commander";
 import { config as dotenv } from "dotenv";
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import { createApp, bridgeSettings } from "../app.js";
-import { loadConfig } from "../config.js";
+import { loadConfig, validateBaseUrl, type Config } from "../config.js";
 import { startBridge } from "../bridge/server.js";
 import { BridgeClient } from "../bridge/client.js";
 import { createServer } from "../mcp/server.js";
@@ -11,6 +12,7 @@ import { parseTool } from "../services/tools.js";
 import { publicData } from "../services/academic.js";
 import { startDashboard } from "../ui/dashboard.js";
 import { spawn } from "node:child_process";
+import { readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 dotenv({ quiet: true });
@@ -223,59 +225,128 @@ program
   .command("ui")
   .description("Open the local status dashboard in your browser")
   .action(async () => {
-    const config = loadConfig(process.env);
-    const settings = bridgeSettings(config);
-    const client = new BridgeClient(settings);
-    let bridge: Awaited<ReturnType<typeof startBridge>> | undefined;
-    try {
-      await client.status();
-    } catch {
-      bridge = await startBridge(settings);
-    }
-    const app = createApp(process.env, program.opts().demo === true);
+    const loadSafe = (): Config | undefined => {
+      try {
+        return loadConfig(process.env);
+      } catch {
+        return undefined;
+      }
+    };
+    const writeEnv = (baseUrl: string): void => {
+      const path = join(process.cwd(), ".env");
+      let content = "";
+      try {
+        content = readFileSync(path, "utf8");
+      } catch {
+        /* absent */
+      }
+      const lines = content
+        .split(/\r?\n/)
+        .filter((line) => line && !line.startsWith("CANVAS_BASE_URL="));
+      lines.push(`CANVAS_BASE_URL=${baseUrl}`);
+      if (!lines.some((line) => line.startsWith("CANVAS_PROVIDER=")))
+        lines.push("CANVAS_PROVIDER=browser");
+      writeFileSync(path, lines.join("\n") + "\n", { mode: 0o600 });
+    };
     const viaNode = /dist[\\/]cli[\\/]index\.js$/.test(
       (process.argv[1] ?? "").replace(/\\/g, "/"),
     );
     const command = viaNode ? "node" : process.execPath;
     const args = viaNode ? [resolve(process.argv[1]!), "serve"] : ["serve"];
-    const snippet = {
-      command,
-      args,
-      env: {
-        CANVAS_BASE_URL: config.baseUrl,
-        CANVAS_PROVIDER: "browser",
-        CANVAS_DB_PATH: config.dbPath,
-        CANVAS_WORKSPACE_ROOT: config.workspaceRoot,
-      },
-    };
-    const home = homedir();
-    const claude =
-      process.platform === "win32"
-        ? join(
-            process.env.APPDATA ?? join(home, "AppData", "Roaming"),
-            "Claude",
-            "claude_desktop_config.json",
-          )
-        : process.platform === "darwin"
+
+    let config = loadSafe();
+    let client: BridgeClient | undefined;
+    let bridge: Awaited<ReturnType<typeof startBridge>> | undefined;
+    let app: ReturnType<typeof createApp> | undefined;
+
+    async function init(): Promise<void> {
+      config = loadSafe();
+      if (!config) {
+        client = undefined;
+        app = undefined;
+        return;
+      }
+      const settings = bridgeSettings(config);
+      client = new BridgeClient(settings);
+      try {
+        await client.status();
+      } catch {
+        bridge = await startBridge(settings);
+      }
+      app = createApp(process.env, program.opts().demo === true);
+    }
+    await init();
+
+    const mcpFiles = () => {
+      const home = homedir();
+      const claude =
+        process.platform === "win32"
           ? join(
-              home,
-              "Library",
-              "Application Support",
+              process.env.APPDATA ?? join(home, "AppData", "Roaming"),
               "Claude",
               "claude_desktop_config.json",
             )
-          : join(home, ".config", "Claude", "claude_desktop_config.json");
-    const files = [
-      { tool: "Claude Desktop", file: claude, key: "mcpServers.canvas" },
-      { tool: "Cursor", file: join(home, ".cursor", "mcp.json"), key: "mcpServers.canvas" },
-      { tool: "Codex", file: join(home, ".codex", "config.toml"), key: "[mcp_servers.canvas]" },
-      { tool: "ChatGPT Desktop", file: "mcpServers JSON (app-managed)", key: "mcpServers.canvas" },
-    ];
+          : process.platform === "darwin"
+            ? join(
+                home,
+                "Library",
+                "Application Support",
+                "Claude",
+                "claude_desktop_config.json",
+              )
+            : join(home, ".config", "Claude", "claude_desktop_config.json");
+      return [
+        { tool: "Claude Desktop", file: claude, key: "mcpServers.canvas" },
+        { tool: "Cursor", file: join(home, ".cursor", "mcp.json"), key: "mcpServers.canvas" },
+        { tool: "Codex", file: join(home, ".codex", "config.toml"), key: "[mcp_servers.canvas]" },
+        { tool: "ChatGPT Desktop", file: "mcpServers JSON (app-managed)", key: "mcpServers.canvas" },
+      ];
+    };
+
     const dashboard = await startDashboard({
-      status: async () => client.status(),
-      health: async () => app.provider.healthCheck(),
-      pair: async () => client.pair(),
-      mcp: () => ({ snippet, files }),
+      status: async () => {
+        if (!config || !client)
+          return { configured: false, bridge: {}, health: { state: "unconfigured" } };
+        const bridgeStatus = await client.status().catch(() => ({}));
+        const health = app
+          ? await app.provider.healthCheck().catch(() => ({ state: "unknown" }))
+          : { state: "unknown" };
+        return { configured: true, bridge: bridgeStatus, health };
+      },
+      pair: async () => {
+        if (!client) throw new Error("Set your Canvas URL first.");
+        return client.pair();
+      },
+      mcp: () => {
+        if (!config) return { configured: false, snippet: null, files: [] };
+        return {
+          configured: true,
+          snippet: {
+            command,
+            args,
+            env: {
+              CANVAS_BASE_URL: config.baseUrl,
+              CANVAS_PROVIDER: "browser",
+              CANVAS_DB_PATH: config.dbPath,
+              CANVAS_WORKSPACE_ROOT: config.workspaceRoot,
+            },
+          },
+          files: mcpFiles(),
+        };
+      },
+      configure: async (baseUrl) => {
+        try {
+          process.env.CANVAS_BASE_URL = validateBaseUrl(baseUrl);
+          writeEnv(process.env.CANVAS_BASE_URL);
+          await init();
+          return { ok: config !== undefined };
+        } catch (error) {
+          return {
+            ok: false,
+            error: error instanceof Error ? error.message : "Invalid Canvas URL",
+          };
+        }
+      },
     });
     console.log(`Dashboard: ${dashboard.url}`);
     console.log("Keep this process running; press Ctrl+C to stop.");
@@ -301,7 +372,7 @@ program
       closed = true;
       await dashboard.close();
       if (bridge) await bridge.close();
-      app.close();
+      app?.close();
     };
     process.once("SIGINT", () => {
       void close();

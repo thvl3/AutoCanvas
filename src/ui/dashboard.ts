@@ -8,9 +8,9 @@ import { once } from "node:events";
 
 export interface DashboardApi {
   status(): Promise<Record<string, unknown>>;
-  health(): Promise<unknown>;
   pair(): Promise<{ pairingCode: string; expires_at: string }>;
   mcp(): Record<string, unknown>;
+  configure(baseUrl: string): Promise<{ ok: boolean; error?: string }>;
 }
 
 function json(res: ServerResponse, body: unknown, status = 200): void {
@@ -25,6 +25,30 @@ function safeEqual(a: string, b: string): boolean {
   const aa = Buffer.from(a);
   const bb = Buffer.from(b);
   return aa.length === bb.length && aa.every((byte, i) => byte === bb[i]);
+}
+
+function readJson(req: IncomingMessage): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    let size = 0;
+    const chunks: Buffer[] = [];
+    req.on("data", (chunk: Buffer) => {
+      size += chunk.length;
+      if (size > 64 * 1024) {
+        reject(new Error("request too large"));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on("end", () => {
+      try {
+        resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+      } catch (error) {
+        reject(error);
+      }
+    });
+    req.on("error", reject);
+  });
 }
 
 const HTML = `<!doctype html>
@@ -59,14 +83,15 @@ const HTML = `<!doctype html>
            padding: 9px 14px; font-size: 14px; cursor: pointer; }
   button.secondary { background: #2a2f37; }
   button:hover { filter: brightness(1.1); }
+  input { width: 100%; background: #0d1014; border: 1px solid #2a2f37; color: #e6e8eb;
+          border-radius: 8px; padding: 10px 12px; font-size: 14px; margin: 8px 0 12px; }
   code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
   pre { background: #0d1014; border: 1px solid #2a2f37; border-radius: 8px;
         padding: 12px; overflow: auto; font-size: 12.5px; white-space: pre; }
   .code { font-size: 22px; letter-spacing: .12em; font-weight: 700; color: #7ab8ff; }
   .muted { color: #8a9199; font-size: 13px; }
   .hint { margin-top: 8px; }
-  textarea { display: none; }
-  .grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+  .err { color: #ff7b7b; font-size: 13px; min-height: 18px; }
 </style>
 </head>
 <body>
@@ -74,7 +99,17 @@ const HTML = `<!doctype html>
   <h1>AutoCanvas</h1>
   <p class="sub">Local Canvas bridge dashboard</p>
 
-  <section>
+  <section id="setup" style="display:none">
+    <h2>Setup</h2>
+    <p class="muted">Enter your Canvas URL to get started. It is the HTTPS origin
+      of your school's Canvas site (for example
+      <code>https://byui.instructure.com</code>).</p>
+    <input id="baseurl" placeholder="https://your-school.instructure.com" />
+    <button id="save">Save and connect</button>
+    <p class="err" id="setuperr"></p>
+  </section>
+
+  <section id="status">
     <h2>Connection</h2>
     <div class="row"><span class="k">Bridge</span><span id="bridge" class="v">—</span></div>
     <div class="row"><span class="k">Extension</span><span id="extension" class="v">—</span></div>
@@ -82,7 +117,7 @@ const HTML = `<!doctype html>
     <div class="row"><span class="k">Origin</span><span id="origin" class="v">—</span></div>
   </section>
 
-  <section>
+  <section id="pair">
     <h2>Pairing code</h2>
     <p>Enter this in the browser extension to pair it with the bridge.</p>
     <p class="code" id="pairing">—</p>
@@ -90,7 +125,7 @@ const HTML = `<!doctype html>
     <button id="newpair" class="secondary">Generate new code</button>
   </section>
 
-  <section>
+  <section id="mcpsec">
     <h2>MCP setup</h2>
     <p class="muted">Register the server with your MCP client using this entry
       (the exact file location depends on the client).</p>
@@ -108,23 +143,29 @@ const HTML = `<!doctype html>
   function pill(text, cls) { return '<span class="pill ' + cls + '">' + text + "</span>"; }
 
   async function refresh() {
+    let d;
     try {
-      const r = await api("/api/status");
-      const d = await r.json();
-      const b = d.bridge ?? {};
-      $("bridge").innerHTML = b.port ? pill("running :" + b.port, "ok") : pill("not running", "bad");
-      $("extension").innerHTML = b.connected ? pill("connected", "ok") : pill("disconnected", "bad");
-      $("origin").textContent = b.origin ?? "—";
-      const h = d.health ?? {};
-      const state = h.state ?? "unknown";
-      $("session").innerHTML = state === "connected" || state === "healthy"
-        ? pill(state, "ok")
-        : state === "authentication_required"
-          ? pill("sign in required", "warn")
-          : pill(String(state), "warn");
+      d = await (await api("/api/status")).json();
     } catch (e) {
-      $("bridge").innerHTML = pill("error", "bad");
+      d = { configured: true, bridge: {}, health: { state: "error" } };
     }
+    const configured = d.configured !== false;
+    $("setup").style.display = configured ? "none" : "block";
+    $("status").style.display = configured ? "block" : "none";
+    $("pair").style.display = configured ? "block" : "none";
+    $("mcpsec").style.display = configured ? "block" : "none";
+    if (!configured) return;
+    const b = d.bridge ?? {};
+    $("bridge").innerHTML = b.port ? pill("running :" + b.port, "ok") : pill("not running", "bad");
+    $("extension").innerHTML = b.connected ? pill("connected", "ok") : pill("disconnected", "bad");
+    $("origin").textContent = b.origin ?? "—";
+    const h = d.health ?? {};
+    const state = h.state ?? "unknown";
+    $("session").innerHTML = state === "connected" || state === "healthy"
+      ? pill(state, "ok")
+      : state === "authentication_required"
+        ? pill("sign in required", "warn")
+        : pill(String(state), "warn");
   }
 
   async function pair() {
@@ -142,14 +183,39 @@ const HTML = `<!doctype html>
     try {
       const r = await api("/api/mcp");
       const d = await r.json();
-      $("mcp").textContent = JSON.stringify(d.snippet, null, 2);
+      $("mcp").textContent = d.snippet
+        ? JSON.stringify(d.snippet, null, 2)
+        : "unavailable";
       $("files").textContent = (d.files ?? []).map((f) => f.tool + ": " + f.file).join("  |  ");
     } catch (e) {
       $("mcp").textContent = "unavailable";
     }
   }
 
+  async function configure() {
+    const baseUrl = $("baseurl").value.trim();
+    $("setuperr").textContent = "";
+    try {
+      const r = await api("/api/configure", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baseUrl }),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        refresh();
+        pair();
+        mcp();
+      } else {
+        $("setuperr").textContent = d.error ?? "Configuration failed";
+      }
+    } catch (e) {
+      $("setuperr").textContent = "Configuration failed";
+    }
+  }
+
   $("newpair").onclick = pair;
+  $("save").onclick = configure;
   $("copy").onclick = () => {
     navigator.clipboard.writeText($("mcp").textContent);
     $("copy").textContent = "Copied";
@@ -157,8 +223,6 @@ const HTML = `<!doctype html>
   };
 
   refresh();
-  pair();
-  mcp();
   setInterval(refresh, 3000);
 </script>
 </body>
@@ -182,13 +246,18 @@ export async function startDashboard(
           res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
           res.end(HTML);
         } else if (url.pathname === "/api/status") {
-          const bridge = await api.status().catch(() => ({}));
-          const health = await api.health().catch(() => ({ state: "unknown" }));
-          json(res, { bridge, health });
+          json(res, await api.status());
         } else if (url.pathname === "/api/pair" && req.method === "POST") {
           json(res, await api.pair());
         } else if (url.pathname === "/api/mcp") {
           json(res, api.mcp());
+        } else if (url.pathname === "/api/configure" && req.method === "POST") {
+          const body = (await readJson(req)) as { baseUrl?: unknown };
+          if (typeof body?.baseUrl !== "string") {
+            json(res, { ok: false, error: "Canvas URL is required." }, 400);
+            return;
+          }
+          json(res, await api.configure(body.baseUrl));
         } else {
           res.writeHead(404);
           res.end("not found");
