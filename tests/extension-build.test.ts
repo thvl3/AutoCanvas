@@ -35,11 +35,14 @@ it("builds Firefox event-page and Chromium MV3 bundles with narrow permissions",
     if (target === "dist-firefox") {
       expect(manifest.background).toEqual({ scripts: ["background.js"] });
       expect(manifest.browser_specific_settings.gecko.strict_min_version).toBe(
-        "128.0",
+        "142.0",
       );
       expect(manifest.browser_specific_settings.gecko.id).toBe(
-        "autocanvas-session@local",
+        "autocanvas-session@thvl3.github.io",
       );
+      expect(
+        manifest.browser_specific_settings.gecko.data_collection_permissions,
+      ).toEqual({ required: ["none"], technicalData: false });
     } else {
       expect(manifest.background).toEqual({ service_worker: "background.js" });
       expect(manifest.minimum_chrome_version).toBe("116");

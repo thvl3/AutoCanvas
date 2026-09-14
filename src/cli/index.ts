@@ -288,9 +288,11 @@ program
     let client: BridgeClient | undefined;
     let bridge: Awaited<ReturnType<typeof startBridge>> | undefined;
     let app: ReturnType<typeof createApp> | undefined;
+    let initError: string | undefined;
 
     async function init(): Promise<void> {
       config = loadSafe();
+      initError = undefined;
       if (!config) {
         client = undefined;
         app = undefined;
@@ -301,9 +303,24 @@ program
       try {
         await client.status();
       } catch {
-        bridge = await startBridge(settings);
+        try {
+          bridge = await startBridge(settings);
+        } catch (error) {
+          initError =
+            (error as NodeJS.ErrnoException).code === "EADDRINUSE"
+              ? "Port 47821 is already in use by another process. Close the other AutoCanvas window (or whatever is holding the port) and restart."
+              : error instanceof Error
+                ? error.message
+                : "Bridge failed to start";
+        }
       }
-      app = createApp(process.env, program.opts().demo === true);
+      try {
+        app = createApp(process.env, program.opts().demo === true);
+      } catch (error) {
+        initError = `${initError ? `${initError}; ` : ""}${
+          error instanceof Error ? error.message : "Failed to open cache"
+        }`;
+      }
     }
     await init();
 
@@ -357,7 +374,12 @@ program
         const health = app
           ? await app.provider.healthCheck().catch(() => ({ state: "unknown" }))
           : { state: "unknown" };
-        return { configured: true, bridge: bridgeStatus, health };
+        return {
+          configured: true,
+          bridge: bridgeStatus,
+          health,
+          error: initError,
+        };
       },
       pair: async () => {
         if (!client) throw new Error("Set your Canvas URL first.");

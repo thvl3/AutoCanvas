@@ -57,13 +57,16 @@ jobs:
       - name: Sign Firefox extension (AMO)
         if: ${{ env.AMO_API_KEY != '' && env.AMO_API_SECRET != '' }}
         run: |
-          pnpm dlx web-ext@10 sign \
-            --source-dir browser-extension/dist-firefox \
-            --channel unlisted \
-            --api-key "$AMO_API_KEY" \
-            --api-secret "$AMO_API_SECRET"
-          ls -la web-ext-artifacts/
-          cp web-ext-artifacts/*.xpi release-assets/canvas-firefox-signed.xpi
+          if pnpm dlx web-ext@10 sign \
+              --source-dir browser-extension/dist-firefox \
+              --channel unlisted \
+              --api-key "$AMO_API_KEY" \
+              --api-secret "$AMO_API_SECRET"; then
+            ls -la web-ext-artifacts/
+            cp web-ext-artifacts/*.xpi release-assets/canvas-firefox-signed.xpi
+          else
+            echo "::warning::AMO signing failed; shipping binaries without a signed xpi."
+          fi
       - uses: actions/download-artifact@v4
         with:
           path: artifacts

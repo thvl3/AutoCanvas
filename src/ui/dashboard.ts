@@ -121,6 +121,7 @@ const HTML = `<!doctype html>
     <div class="row"><span class="k">Extension</span><span id="extension" class="v">—</span></div>
     <div class="row"><span class="k">Canvas session</span><span id="session" class="v">—</span></div>
     <div class="row"><span class="k">Origin</span><span id="origin" class="v">—</span></div>
+    <div class="row" id="erow" style="display:none"><span class="k">Error</span><span id="starterr" class="v" style="color:#ff7b7b"></span></div>
   </section>
 
   <section id="installsec">
@@ -181,6 +182,12 @@ const HTML = `<!doctype html>
       : state === "authentication_required"
         ? pill("sign in required", "warn")
         : pill(String(state), "warn");
+    if (d.error) {
+      $("erow").style.display = "flex";
+      $("starterr").textContent = d.error;
+    } else {
+      $("erow").style.display = "none";
+    }
   }
 
   async function pair() {
