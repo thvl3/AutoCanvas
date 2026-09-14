@@ -302,18 +302,36 @@ program
       }
       const settings = bridgeSettings(config);
       client = new BridgeClient(settings);
-      try {
-        await client.status();
-      } catch {
+      const tryStatus = async (): Promise<boolean> => {
+        try {
+          await client?.status();
+          return true;
+        } catch {
+          return false;
+        }
+      };
+      // Reuse an existing bridge (matching credentials) when one is running.
+      if (!(await tryStatus())) {
         try {
           bridge = await startBridge(settings);
         } catch (error) {
-          initError =
-            (error as NodeJS.ErrnoException).code === "EADDRINUSE"
-              ? "Port 47821 is already in use by another process. Close the other AutoCanvas window (or whatever is holding the port) and restart."
-              : error instanceof Error
-                ? error.message
-                : "Bridge failed to start";
+          if ((error as NodeJS.ErrnoException).code === "EADDRINUSE") {
+            // Another process holds the port. It may be a same-credential
+            // instance that just has not finished writing its state yet, so
+            // retry connecting a few times before giving up.
+            let reused = false;
+            for (let i = 0; i < 5 && !reused; i++) {
+              await new Promise((resolve) => setTimeout(resolve, 300));
+              reused = await tryStatus();
+            }
+            if (!reused) {
+              initError =
+                "Port 47821 is already in use by another process. Close the other AutoCanvas window (or run `taskkill /F /IM canvas-mcp-windows-x64.exe`) and restart.";
+            }
+          } else {
+            initError =
+              error instanceof Error ? error.message : "Bridge failed to start";
+          }
         }
       }
       try {
