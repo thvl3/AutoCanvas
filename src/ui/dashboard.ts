@@ -17,6 +17,15 @@ export interface DashboardApi {
     addedToPath?: boolean;
     error?: string;
   }>;
+  updateCheck(): Promise<{
+    currentVersion: string;
+    latestVersion: string;
+    available: boolean;
+    downloadUrl?: string;
+    notes?: string;
+    error?: string;
+  }>;
+  updateApply(downloadUrl: string): Promise<{ ok: boolean; message: string }>;
 }
 
 function json(res: ServerResponse, body: unknown, status = 200): void {
@@ -131,6 +140,13 @@ const HTML = `<!doctype html>
       <code>canvas-mcp</code> runs from anywhere.</p>
     <button id="install">Install</button>
     <p class="muted" id="installresult"></p>
+  </section>
+
+  <section id="updatesec" style="display:none">
+    <h2>Update available</h2>
+    <p class="muted" id="updatever"></p>
+    <button id="update">Update &amp; restart</button>
+    <p class="muted" id="updateresult"></p>
   </section>
 
   <section id="pair">
@@ -249,9 +265,43 @@ const HTML = `<!doctype html>
     }
   }
 
+  let updateUrl = null;
+  async function checkUpdate() {
+    try {
+      const r = await api("/api/update");
+      const d = await r.json();
+      if (d.available && d.downloadUrl) {
+        updateUrl = d.downloadUrl;
+        $("updatever").textContent =
+          "Version " + d.latestVersion + " is available (you are on " + d.currentVersion + ").";
+        $("updatesec").style.display = "block";
+      }
+    } catch (e) {
+      /* no network or not a release binary; leave hidden */
+    }
+  }
+  async function doUpdate() {
+    if (!updateUrl) return;
+    $("updateresult").textContent = "Downloading and installing…";
+    try {
+      const r = await api("/api/update/apply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ downloadUrl: updateUrl }),
+      });
+      const d = await r.json();
+      $("updateresult").textContent = d.ok
+        ? d.message
+        : "Update failed: " + (d.message ?? "error");
+    } catch (e) {
+      $("updateresult").textContent = "Update failed";
+    }
+  }
+
   $("newpair").onclick = pair;
   $("save").onclick = configure;
   $("install").onclick = install;
+  $("update").onclick = doUpdate;
   $("copy").onclick = () => {
     navigator.clipboard.writeText($("mcp").textContent);
     $("copy").textContent = "Copied";
@@ -260,6 +310,7 @@ const HTML = `<!doctype html>
 
   refresh();
   setInterval(refresh, 3000);
+  checkUpdate();
 </script>
 </body>
 </html>
@@ -296,6 +347,18 @@ export async function startDashboard(
           json(res, await api.configure(body.baseUrl));
         } else if (url.pathname === "/api/install" && req.method === "POST") {
           json(res, await api.install());
+        } else if (url.pathname === "/api/update") {
+          json(res, await api.updateCheck());
+        } else if (
+          url.pathname === "/api/update/apply" &&
+          req.method === "POST"
+        ) {
+          const body = (await readJson(req)) as { downloadUrl?: unknown };
+          if (typeof body?.downloadUrl !== "string") {
+            json(res, { ok: false, message: "Download URL is required." }, 400);
+            return;
+          }
+          json(res, await api.updateApply(body.downloadUrl));
         } else {
           res.writeHead(404);
           res.end("not found");

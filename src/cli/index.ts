@@ -12,6 +12,8 @@ import { parseTool } from "../services/tools.js";
 import { publicData } from "../services/academic.js";
 import { startDashboard } from "../ui/dashboard.js";
 import { selfInstall, installDirPath } from "../services/install.js";
+import { checkForUpdates, applyUpdate } from "../services/updates.js";
+import { APP_VERSION } from "../version.js";
 import { configFilePath, isSeaExecutable } from "../paths.js";
 import { spawn } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -27,7 +29,7 @@ const program = new Command()
   .description(
     "Canvas academic context, planning and MCP. No submission actions.",
   )
-  .version("0.1.0")
+  .version(APP_VERSION)
   .option("--demo", "Use synthetic fixtures, never a live institution")
   .option(
     "--human",
@@ -430,6 +432,16 @@ program
             error: error instanceof Error ? error.message : "Install failed",
           };
         }
+      },
+      updateCheck: async () => checkForUpdates(),
+      updateApply: async (downloadUrl) => {
+        const result = await applyUpdate(downloadUrl);
+        if (result.ok) {
+          // Let the response reach the browser, then exit so the Windows
+          // swapper (or the user) can finish installing.
+          setTimeout(() => process.exit(0), 400);
+        }
+        return result;
       },
     });
     console.log(`Dashboard: ${dashboard.url}`);

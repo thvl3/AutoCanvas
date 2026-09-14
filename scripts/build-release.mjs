@@ -19,6 +19,7 @@ import { build } from "esbuild";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const os = platform();
 const arch = process.arch;
+const version = (process.env.AUTOCANVAS_VERSION ?? "0.0.0").replace(/^v/, "");
 const SEA_FUSE = "NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2";
 const exeName =
   os === "win32"
@@ -42,6 +43,9 @@ await build({
   target: "node22",
   outfile: join(outDir, "cli.cjs"),
   logLevel: "warning",
+  define: {
+    __AUTOCANVAS_VERSION__: JSON.stringify(version),
+  },
 });
 
 // 2. Generate the SEA blob.

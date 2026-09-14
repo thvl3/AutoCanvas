@@ -37,6 +37,13 @@ describe("dashboard", () => {
         installedPath: "/usr/local/bin/canvas-mcp",
         addedToPath: true,
       }),
+      updateCheck: async () => ({
+        currentVersion: "0.1.0",
+        latestVersion: "0.1.1",
+        available: true,
+        downloadUrl: "https://example.com/canvas-mcp-linux-x64",
+      }),
+      updateApply: async () => ({ ok: true, message: "Updated" }),
     });
     cleanups.push(() => dashboard.close());
     const url = new URL(dashboard.url);
@@ -96,6 +103,23 @@ describe("dashboard", () => {
       installedPath: "/usr/local/bin/canvas-mcp",
       addedToPath: true,
     });
+
+    // Update check + apply.
+    const update = await (await fetch(`${base}/api/update?t=${token}`)).json();
+    expect(update).toEqual({
+      currentVersion: "0.1.0",
+      latestVersion: "0.1.1",
+      available: true,
+      downloadUrl: "https://example.com/canvas-mcp-linux-x64",
+    });
+    const applied = await (
+      await fetch(`${base}/api/update/apply?t=${token}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ downloadUrl: "https://example.com/x" }),
+      })
+    ).json();
+    expect(applied).toEqual({ ok: true, message: "Updated" });
 
     // A wrong token is rejected even for a known path.
     expect((await fetch(`${base}/api/status?t=wrong`)).status).toBe(403);

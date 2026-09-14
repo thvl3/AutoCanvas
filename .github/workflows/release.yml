@@ -24,6 +24,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm run release:build
+        env:
+          AUTOCANVAS_VERSION: ${{ github.ref_name }}
       - uses: actions/upload-artifact@v4
         with:
           name: canvas-mcp-${{ matrix.os }}
