@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
-import { homedir } from "node:os";
 import { z } from "zod";
+import { dataDir } from "./paths.js";
 
 export interface Config {
   baseUrl: string;
@@ -62,9 +62,18 @@ const settingsSchema = z.object({
   CANVAS_PROVIDER: z.enum(["browser", "mock", "legacy-pat"]).default("browser"),
   CANVAS_BRIDGE_HOST: z.literal("127.0.0.1").default("127.0.0.1"),
   CANVAS_BRIDGE_PORT: integer(47821, 1, 65535),
-  CANVAS_BRIDGE_STATE_DIR: z.string().min(1).default(resolve(homedir(), ".local/state/autocanvas/bridge")), 
-  CANVAS_DB_PATH: z.string().min(1).default("data/canvas.sqlite"),
-  CANVAS_WORKSPACE_ROOT: z.string().min(1).default("workspaces"),
+  CANVAS_BRIDGE_STATE_DIR: z
+    .string()
+    .min(1)
+    .default(resolve(dataDir(), "bridge")),
+  CANVAS_DB_PATH: z
+    .string()
+    .min(1)
+    .default(resolve(dataDir(), "canvas.sqlite")),
+  CANVAS_WORKSPACE_ROOT: z
+    .string()
+    .min(1)
+    .default(resolve(dataDir(), "workspaces")),
   CANVAS_TIMEZONE: z
     .string()
     .refine((value) => {
@@ -113,7 +122,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const settings = result.data;
   return {
     baseUrl,
-    accessToken: settings.CANVAS_PROVIDER === "legacy-pat" ? validateAccessToken(env.CANVAS_ACCESS_TOKEN) : "",
+    accessToken:
+      settings.CANVAS_PROVIDER === "legacy-pat"
+        ? validateAccessToken(env.CANVAS_ACCESS_TOKEN)
+        : "",
     provider: settings.CANVAS_PROVIDER,
     bridgeHost: settings.CANVAS_BRIDGE_HOST,
     bridgePort: settings.CANVAS_BRIDGE_PORT,

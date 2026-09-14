@@ -32,6 +32,11 @@ describe("dashboard", () => {
         configured = true;
         return { ok: baseUrl === "https://school.example" };
       },
+      install: async () => ({
+        ok: true,
+        installedPath: "/usr/local/bin/canvas-mcp",
+        addedToPath: true,
+      }),
     });
     cleanups.push(() => dashboard.close());
     const url = new URL(dashboard.url);
@@ -81,6 +86,16 @@ describe("dashboard", () => {
       body: JSON.stringify({}),
     });
     expect(bad.status).toBe(400);
+
+    // Install.
+    const install = await (
+      await fetch(`${base}/api/install?t=${token}`, { method: "POST" })
+    ).json();
+    expect(install).toEqual({
+      ok: true,
+      installedPath: "/usr/local/bin/canvas-mcp",
+      addedToPath: true,
+    });
 
     // A wrong token is rejected even for a known path.
     expect((await fetch(`${base}/api/status?t=wrong`)).status).toBe(403);

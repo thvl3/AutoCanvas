@@ -37,15 +37,29 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Package Firefox extension
+        run: |
+          pnpm run extension:build
+          mkdir -p release-assets
+          (cd browser-extension/dist-firefox && zip -r ../../release-assets/canvas-firefox-extension.zip . -x "*.DS_Store")
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
-      - name: Flatten artifacts
+      - name: Collect binaries
         run: |
-          mkdir -p dist
-          find artifacts -type f -exec cp -p {} dist/ \;
-          ls -la dist/
+          mkdir -p release-assets
+          find artifacts -type f -exec cp -p {} release-assets/ \;
+          ls -la release-assets/
       - uses: softprops/action-gh-release@v2
         with:
-          files: dist/*
+          files: release-assets/*
           generate_release_notes: true

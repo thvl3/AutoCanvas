@@ -11,10 +11,16 @@ import { createServer } from "../mcp/server.js";
 import { parseTool } from "../services/tools.js";
 import { publicData } from "../services/academic.js";
 import { startDashboard } from "../ui/dashboard.js";
+import { selfInstall, installDirPath } from "../services/install.js";
+import { configFilePath, isSeaExecutable } from "../paths.js";
 import { spawn } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+// Load the per-user config file first, then fall back to a CWD `.env` (the
+// source-dev convention). dotenv never overrides real environment variables,
+// so an explicit env var always wins over both.
+dotenv({ path: configFilePath(), quiet: true });
 dotenv({ quiet: true });
 const program = new Command()
   .name("canvas-mcp")
@@ -66,29 +72,54 @@ async function run(
 }
 const query = (name: string, args: Record<string, unknown>) =>
   run((app) => app.service.invoke(name, parseTool(name, args)));
-const auth=program.command("auth").description("Check the Canvas browser connection");
-auth.command("check").action(()=>run(app=>app.api.authCheck()));
-auth.command("status").action(()=>run(app=>app.provider.healthCheck()));
-const bridgeCommand=program.command("bridge").description("Pair the read-only Canvas extension over loopback");
-bridgeCommand.command("start").action(async()=>{
- const settings=bridgeSettings(loadConfig(process.env));
- const bridge=await startBridge(settings);
- console.log(`Canvas Bridge listening on 127.0.0.1:${bridge.port}\nCanvas origin: ${settings.origin}\nPairing code: ${bridge.pairingCode}\nEnter this code in the extension. It expires after five minutes. Keep this process running.`);
- let closed=false;const close=async()=>{if(closed)return;closed=true;await bridge.close();};
- process.once("SIGINT",()=>{void close();});process.once("SIGTERM",()=>{void close();});
+const auth = program
+  .command("auth")
+  .description("Check the Canvas browser connection");
+auth.command("check").action(() => run((app) => app.api.authCheck()));
+auth.command("status").action(() => run((app) => app.provider.healthCheck()));
+const bridgeCommand = program
+  .command("bridge")
+  .description("Pair the read-only Canvas extension over loopback");
+bridgeCommand.command("start").action(async () => {
+  const settings = bridgeSettings(loadConfig(process.env));
+  const bridge = await startBridge(settings);
+  console.log(
+    `Canvas Bridge listening on 127.0.0.1:${bridge.port}\nCanvas origin: ${settings.origin}\nPairing code: ${bridge.pairingCode}\nEnter this code in the extension. It expires after five minutes. Keep this process running.`,
+  );
+  let closed = false;
+  const close = async () => {
+    if (closed) return;
+    closed = true;
+    await bridge.close();
+  };
+  process.once("SIGINT", () => {
+    void close();
+  });
+  process.once("SIGTERM", () => {
+    void close();
+  });
 });
-bridgeCommand.command("status").action(async()=>{
- const client=new BridgeClient(bridgeSettings(loadConfig(process.env)));
- console.log(JSON.stringify(await client.status(),null,2));
+bridgeCommand.command("status").action(async () => {
+  const client = new BridgeClient(bridgeSettings(loadConfig(process.env)));
+  console.log(JSON.stringify(await client.status(), null, 2));
 });
-bridgeCommand.command("pair").action(async()=>{
- const client=new BridgeClient(bridgeSettings(loadConfig(process.env)));
- console.log(JSON.stringify(await client.pair(),null,2));
+bridgeCommand.command("pair").action(async () => {
+  const client = new BridgeClient(bridgeSettings(loadConfig(process.env)));
+  console.log(JSON.stringify(await client.pair(), null, 2));
 });
-program.command("debug").description("Read-only provider diagnostics").command("graphql-schema").action(()=>run(async app=>{
- if(!app.provider.schema)throw new Error("Schema discovery is available with the browser provider.");
- return app.provider.schema();
-}));
+program
+  .command("debug")
+  .description("Read-only provider diagnostics")
+  .command("graphql-schema")
+  .action(() =>
+    run(async (app) => {
+      if (!app.provider.schema)
+        throw new Error(
+          "Schema discovery is available with the browser provider.",
+        );
+      return app.provider.schema();
+    }),
+  );
 program
   .command("courses")
   .option("--cached", "Use the local cache instead of Canvas")
@@ -233,7 +264,8 @@ program
       }
     };
     const writeEnv = (baseUrl: string): void => {
-      const path = join(process.cwd(), ".env");
+      const path = configFilePath();
+      mkdirSync(dirname(path), { recursive: true });
       let content = "";
       try {
         content = readFileSync(path, "utf8");
@@ -248,9 +280,7 @@ program
         lines.push("CANVAS_PROVIDER=browser");
       writeFileSync(path, lines.join("\n") + "\n", { mode: 0o600 });
     };
-    const viaNode = /dist[\\/]cli[\\/]index\.js$/.test(
-      (process.argv[1] ?? "").replace(/\\/g, "/"),
-    );
+    const viaNode = !isSeaExecutable();
     const command = viaNode ? "node" : process.execPath;
     const args = viaNode ? [resolve(process.argv[1]!), "serve"] : ["serve"];
 
@@ -297,16 +327,32 @@ program
             : join(home, ".config", "Claude", "claude_desktop_config.json");
       return [
         { tool: "Claude Desktop", file: claude, key: "mcpServers.canvas" },
-        { tool: "Cursor", file: join(home, ".cursor", "mcp.json"), key: "mcpServers.canvas" },
-        { tool: "Codex", file: join(home, ".codex", "config.toml"), key: "[mcp_servers.canvas]" },
-        { tool: "ChatGPT Desktop", file: "mcpServers JSON (app-managed)", key: "mcpServers.canvas" },
+        {
+          tool: "Cursor",
+          file: join(home, ".cursor", "mcp.json"),
+          key: "mcpServers.canvas",
+        },
+        {
+          tool: "Codex",
+          file: join(home, ".codex", "config.toml"),
+          key: "[mcp_servers.canvas]",
+        },
+        {
+          tool: "ChatGPT Desktop",
+          file: "mcpServers JSON (app-managed)",
+          key: "mcpServers.canvas",
+        },
       ];
     };
 
     const dashboard = await startDashboard({
       status: async () => {
         if (!config || !client)
-          return { configured: false, bridge: {}, health: { state: "unconfigured" } };
+          return {
+            configured: false,
+            bridge: {},
+            health: { state: "unconfigured" },
+          };
         const bridgeStatus = await client.status().catch(() => ({}));
         const health = app
           ? await app.provider.healthCheck().catch(() => ({ state: "unknown" }))
@@ -343,7 +389,23 @@ program
         } catch (error) {
           return {
             ok: false,
-            error: error instanceof Error ? error.message : "Invalid Canvas URL",
+            error:
+              error instanceof Error ? error.message : "Invalid Canvas URL",
+          };
+        }
+      },
+      install: async () => {
+        try {
+          const result = selfInstall();
+          return {
+            ok: true,
+            installedPath: result.installedPath,
+            addedToPath: result.addedToPath,
+          };
+        } catch (error) {
+          return {
+            ok: false,
+            error: error instanceof Error ? error.message : "Install failed",
           };
         }
       },
@@ -361,7 +423,10 @@ program
         ? ["/c", "start", "", dashboard.url]
         : [dashboard.url];
     try {
-      const child = spawn(opener, openArgs, { stdio: "ignore", detached: true });
+      const child = spawn(opener, openArgs, {
+        stdio: "ignore",
+        detached: true,
+      });
       child.unref();
     } catch {
       /* the URL is printed above regardless */
@@ -381,6 +446,35 @@ program
       void close();
     });
   });
+program
+  .command("install")
+  .description("Install the executable to a stable location and add it to PATH")
+  .action(() => {
+    if (!isSeaExecutable()) {
+      console.error(
+        "install: only the standalone executable can self-install. The source " +
+          "build is installed via `pnpm setup` (scripts/install.mjs).",
+      );
+      process.exitCode = 1;
+      return;
+    }
+    try {
+      const result = selfInstall();
+      console.log(`Installed to ${result.installedPath}`);
+      if (result.addedToPath) {
+        console.log(
+          "Added to PATH. Open a new terminal and run `canvas-mcp` from anywhere.",
+        );
+      } else {
+        console.log(
+          `Add "${installDirPath()}" to your PATH, then run \`canvas-mcp\`.`,
+        );
+      }
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : "Install failed");
+      process.exitCode = 1;
+    }
+  });
 // Running the binary with no command opens the dashboard (e.g. double-clicking
 // the Windows executable).
 if (process.argv.length <= 2) process.argv.push("ui");
@@ -388,6 +482,19 @@ program.parseAsync().catch((error) => {
   let message = error instanceof Error ? error.message : "Command failed";
   if (process.env.CANVAS_ACCESS_TOKEN)
     message = message.replaceAll(process.env.CANVAS_ACCESS_TOKEN, "[REDACTED]");
-  console.error(JSON.stringify({ ok: false, error: message, code: error instanceof Error && "code" in error ? error.code : "command_error", retryable: error instanceof Error && "retryable" in error && error.retryable===true }));
+  console.error(
+    JSON.stringify({
+      ok: false,
+      error: message,
+      code:
+        error instanceof Error && "code" in error
+          ? error.code
+          : "command_error",
+      retryable:
+        error instanceof Error &&
+        "retryable" in error &&
+        error.retryable === true,
+    }),
+  );
   process.exitCode = 1;
 });

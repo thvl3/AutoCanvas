@@ -12,12 +12,18 @@ Normal use relies on your existing Canvas browser login. No Canvas personal acce
 
 ## Releases
 
-Each tagged release (`v*`) attaches prebuilt single-file executables for Linux x64, macOS arm64, and Windows x64. Download `canvas-mcp-<os>-<arch>[.exe]` and use it in place of `node dist/cli/index.js` — no Node or pnpm install required:
+Each tagged release (`v*`) attaches prebuilt single-file executables for Linux x64, macOS arm64, and Windows x64, plus `canvas-firefox-extension.zip` (the unpacked Firefox extension, for `about:debugging` temporary load). Download `canvas-mcp-<os>-<arch>[.exe]` and use it in place of `node dist/cli/index.js` — no Node or pnpm install required:
 
 ```sh
 ./canvas-mcp-linux-x64 bridge start
 ./canvas-mcp-linux-x64 sync
 ./canvas-mcp-windows-x64.exe serve      # as a stdio MCP server
+```
+
+Running the binary with no command opens the local dashboard, where you can set your Canvas URL and install it. To install it to a stable per-user location and add it to PATH in one step:
+
+```sh
+./canvas-mcp-windows-x64.exe install    # or the Install button in the dashboard
 ```
 
 For an MCP host, register the executable directly: `command` is the binary path, `args` is `["serve"]`, and `env` carries the same absolute `CANVAS_DB_PATH` / `CANVAS_WORKSPACE_ROOT` as the source build.
@@ -86,7 +92,7 @@ node dist/cli/index.js upcoming --days 7
 
 `auth status` reports browser/extension/session health. If Canvas needs login, sign in normally and retry. If the extension is disconnected, check the bridge and extension options. `bridge pair` issues a fresh pairing code when the old one expires.
 
-A local dashboard is available with `ui`: it opens in your browser and shows live connection status, the current pairing code (with one-click regeneration), and a copy-paste MCP config snippet for Claude Desktop, Cursor, Codex, or ChatGPT Desktop. The release binary exposes the same command (`./canvas-mcp-windows-x64.exe ui`).
+A local dashboard is available with `ui`: it opens in your browser and shows live connection status, the current pairing code (with one-click regeneration), and a copy-paste MCP config snippet for Claude Desktop, Cursor, Codex, or ChatGPT Desktop. When the Canvas URL is not yet configured it shows a setup form, and it offers one-click install to a stable location. The release binary opens the same dashboard automatically when run with no command (`./canvas-mcp-windows-x64.exe`).
 
 `courses` queries the provider live. Other academic commands normally read SQLite; sync first. Results include freshness. Partial sync retains previous data and reports warnings rather than turning unavailable content into an empty collection. Use `debug graphql-schema` to inspect available GraphQL type fields through the signed-in browser.
 
@@ -111,7 +117,7 @@ Have your MCP client launch the compiled CLI over stdio:
 }
 ```
 
-The separately running bridge and paired browser extension handle acquisition. The client does not need bridge credentials in its configuration; the local app reads its private pairing state. Use the same OS user and bridge state directory for the CLI and MCP. `.env` loads from the process working directory, so use absolute paths in host configuration. Logs go to stderr; stdout is MCP protocol only.
+The separately running bridge and paired browser extension handle acquisition. The client does not need bridge credentials in its configuration; the local app reads its private pairing state. Use the same OS user and bridge state directory for the CLI and MCP. Config loads from the per-user config directory (`~/.config/autocanvas/.env` on Linux, `%APPDATA%\autocanvas\.env` on Windows, `~/Library/Application Support/autocanvas/.env` on macOS), falling back to a CWD `.env`; explicit environment variables always win. Data (SQLite cache, workspaces, bridge state) defaults to the per-user state directory, never the process working directory, so use absolute paths only if you override the defaults in host configuration. Logs go to stderr; stdout is MCP protocol only.
 
 Call `canvas_auth_status` to diagnose the connection, then `canvas_sync`. Existing academic tools keep their schemas and normalized outputs. See [the tool reference](docs/mcp-tools.md).
 

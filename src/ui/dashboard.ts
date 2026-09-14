@@ -11,6 +11,12 @@ export interface DashboardApi {
   pair(): Promise<{ pairingCode: string; expires_at: string }>;
   mcp(): Record<string, unknown>;
   configure(baseUrl: string): Promise<{ ok: boolean; error?: string }>;
+  install(): Promise<{
+    ok: boolean;
+    installedPath?: string;
+    addedToPath?: boolean;
+    error?: string;
+  }>;
 }
 
 function json(res: ServerResponse, body: unknown, status = 200): void {
@@ -117,6 +123,15 @@ const HTML = `<!doctype html>
     <div class="row"><span class="k">Origin</span><span id="origin" class="v">—</span></div>
   </section>
 
+  <section id="installsec">
+    <h2>Install</h2>
+    <p class="muted" id="installnote">You may be running from a temporary location
+      (e.g. Downloads). Install to a stable folder and add it to PATH so
+      <code>canvas-mcp</code> runs from anywhere.</p>
+    <button id="install">Install</button>
+    <p class="muted" id="installresult"></p>
+  </section>
+
   <section id="pair">
     <h2>Pairing code</h2>
     <p>Enter this in the browser extension to pair it with the bridge.</p>
@@ -214,8 +229,22 @@ const HTML = `<!doctype html>
     }
   }
 
+  async function install() {
+    $("installresult").textContent = "Installing…";
+    try {
+      const r = await api("/api/install", { method: "POST" });
+      const d = await r.json();
+      $("installresult").textContent = d.ok
+        ? "Installed to " + d.installedPath + (d.addedToPath ? " and added to PATH (open a new terminal to use canvas-mcp)." : ". Add this folder to your PATH.")
+        : "Install failed: " + (d.error ?? "unknown error");
+    } catch (e) {
+      $("installresult").textContent = "Install failed";
+    }
+  }
+
   $("newpair").onclick = pair;
   $("save").onclick = configure;
+  $("install").onclick = install;
   $("copy").onclick = () => {
     navigator.clipboard.writeText($("mcp").textContent);
     $("copy").textContent = "Copied";
@@ -258,6 +287,8 @@ export async function startDashboard(
             return;
           }
           json(res, await api.configure(body.baseUrl));
+        } else if (url.pathname === "/api/install" && req.method === "POST") {
+          json(res, await api.install());
         } else {
           res.writeHead(404);
           res.end("not found");

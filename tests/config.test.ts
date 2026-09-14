@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { resolve } from "node:path";
 import { loadConfig } from "../src/config.js";
+import { dataDir } from "../src/paths.js";
 
 describe("configuration", () => {
   it("rejects insecure or credential-bearing origins and invalid settings without echoing secrets", () => {
@@ -89,8 +90,8 @@ describe("configuration", () => {
     expect(config).toMatchObject({
       baseUrl: "https://canvas.example",
       accessToken: "private-token",
-      dbPath: resolve("data/canvas.sqlite"),
-      workspaceRoot: resolve("workspaces"),
+      dbPath: resolve(dataDir(), "canvas.sqlite"),
+      workspaceRoot: resolve(dataDir(), "workspaces"),
       timezone: "UTC",
       timeoutMs: 30000,
       maxRetries: 3,
