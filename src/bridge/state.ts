@@ -17,6 +17,22 @@ const stateSchema = z
 export type Credentials = z.infer<typeof stateSchema>;
 export const credentialPath = (settings: BridgeSettings): string =>
   join(settings.stateDir, "bridge-credentials.json");
+
+// Windows has no POSIX mode bits or getuid(); Node reports synthetic modes
+// (0o40777 dirs, 0o100666 files) that would always trip the 0700/0600 checks.
+// On Windows, per-user privacy is enforced by the profile ACLs (state lives
+// under %LOCALAPPDATA%), so we only verify "real directory/file, not a
+// symlink/junction" there.
+export function insecurePermissions(
+  info: { mode: number; uid: number },
+  isWindows: boolean = process.platform === "win32",
+): boolean {
+  if (isWindows) return false;
+  return (
+    (info.mode & 0o077) !== 0 ||
+    (typeof process.getuid === "function" && info.uid !== process.getuid())
+  );
+}
 export function checkSettings(settings: BridgeSettings): void {
   let validOrigin = false;
   try {
@@ -52,12 +68,7 @@ async function privateDirectory(
 ): Promise<void> {
   if (create) await mkdir(settings.stateDir, { recursive: true, mode: 0o700 });
   const info = await lstat(settings.stateDir);
-  if (
-    !info.isDirectory() ||
-    info.isSymbolicLink() ||
-    (info.mode & 0o077) !== 0 ||
-    (process.getuid && info.uid !== process.getuid())
-  )
+  if (!info.isDirectory() || info.isSymbolicLink() || insecurePermissions(info))
     throw new BridgeError(
       "insecure_state",
       "Bridge state directory must be owned by you with mode 0700.",
@@ -73,12 +84,7 @@ export async function readCredentials(
   );
   try {
     const info = await file.stat();
-    if (
-      !info.isFile() ||
-      info.size > 4096 ||
-      (info.mode & 0o077) !== 0 ||
-      (process.getuid && info.uid !== process.getuid())
-    )
+    if (!info.isFile() || info.size > 4096 || insecurePermissions(info))
       throw new BridgeError(
         "insecure_state",
         "Bridge credential file must be owned by you with mode 0600.",

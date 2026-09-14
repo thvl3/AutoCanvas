@@ -12,6 +12,22 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { BridgeClient } from "../src/bridge/client.js";
 import { startBridge } from "../src/bridge/server.js";
+import { insecurePermissions } from "../src/bridge/state.js";
+
+it("skips POSIX mode/uid checks on Windows but enforces them on POSIX", () => {
+  // Windows: synthetic Node modes (0o40777 dirs, 0o100666 files) and no getuid
+  // must never be rejected — privacy is enforced by profile ACLs.
+  expect(insecurePermissions({ mode: 0o40777, uid: 0 }, true)).toBe(false);
+  expect(insecurePermissions({ mode: 0o100666, uid: -1 }, true)).toBe(false);
+  // POSIX: group/other bits or a mismatched uid are rejected.
+  const uid = process.getuid() as number;
+  expect(insecurePermissions({ mode: 0o40700, uid }, false)).toBe(false);
+  expect(insecurePermissions({ mode: 0o40777, uid }, false)).toBe(true);
+  expect(insecurePermissions({ mode: 0o100644, uid }, false)).toBe(true);
+  expect(insecurePermissions({ mode: 0o40700, uid: uid + 1 }, false)).toBe(
+    true,
+  );
+});
 
 it("rereads changed credentials on restart and fails closed on unsafe private state", async () => {
   const root = await mkdtemp(join(tmpdir(), "bridge-state-"));
