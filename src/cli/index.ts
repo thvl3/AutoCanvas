@@ -310,6 +310,9 @@ program
       void close();
     });
   });
+// Running the binary with no command opens the dashboard (e.g. double-clicking
+// the Windows executable).
+if (process.argv.length <= 2) process.argv.push("ui");
 program.parseAsync().catch((error) => {
   let message = error instanceof Error ? error.message : "Command failed";
   if (process.env.CANVAS_ACCESS_TOKEN)
