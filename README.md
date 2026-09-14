@@ -62,7 +62,7 @@ The bridge listens only on `127.0.0.1:47821` and prints an expiring pairing code
 3. Open the extension's options, confirm the Canvas origin and bridge port, and enter the pairing code.
 4. Grant access only to the configured Canvas origin.
 
-Firefox temporary add-ons are development installations and must be reloaded after a browser restart. Permanent standard-Firefox installation requires a Mozilla-signed package; no signing account is bundled with this repository. Once installed, bridge reconnects do not need another Canvas login or cookie export.
+Firefox temporary add-ons are development installations and must be reloaded after a browser restart. Permanent standard-Firefox installation requires a Mozilla-signed package; no signing account is bundled with this repository. When `AMO_API_KEY` and `AMO_API_SECRET` repository secrets are present, the release workflow signs the extension (`web-ext sign --channel unlisted`) and attaches `canvas-firefox-signed.xpi`, which installs permanently with a single "Add to Firefox?" confirmation. The extension ID is `autocanvas-session@thvl3.github.io` and its `manifest.json` version must be bumped before each re-sign (AMO rejects duplicate versions). Once installed, bridge reconnects do not need another Canvas login or cookie export.
 
 ### Chrome / Edge / Chromium
 

@@ -51,6 +51,19 @@ jobs:
           pnpm run extension:build
           mkdir -p release-assets
           (cd browser-extension/dist-firefox && zip -r ../../release-assets/canvas-firefox-extension.zip . -x "*.DS_Store")
+      - name: Sign Firefox extension (AMO)
+        if: ${{ secrets.AMO_API_KEY != '' && secrets.AMO_API_SECRET != '' }}
+        env:
+          AMO_API_KEY: ${{ secrets.AMO_API_KEY }}
+          AMO_API_SECRET: ${{ secrets.AMO_API_SECRET }}
+        run: |
+          pnpm dlx web-ext@10 sign \
+            --source-dir browser-extension/dist-firefox \
+            --channel unlisted \
+            --api-key "$AMO_API_KEY" \
+            --api-secret "$AMO_API_SECRET"
+          ls -la web-ext-artifacts/
+          cp web-ext-artifacts/*.xpi release-assets/canvas-firefox-signed.xpi
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
