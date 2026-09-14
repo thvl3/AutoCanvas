@@ -6,9 +6,9 @@
 - **Defaults:** editable `https://byui.instructure.com`; loopback `127.0.0.1:47821`.
 - **Harness API:** named export `executeInCanvas(origin, operation)` in `browser-extension/src/executor.ts`, returning `{ok:true,result}` or `{ok:false,error}`. Compile with esbuild and serialize into the synthetic HTTPS page; do not pass bridge secrets into it. `tests/extension-browser.test.ts` is a working harness example.
 
-## Bridge-owner integration blocker
+## Bridge-owner integration
 
-The extension sends strict `{protocolVersion:1,type:'ping'}` every 20 seconds after ready. The bridge must accept that authenticated frame and return `{protocolVersion:1,type:'pong'}`. The last inspected `src/bridge/server.ts` still validated every post-hello message as a request response and thus rejected heartbeat ping. **Add ping/pong handling before claiming a stable live connection.** The bridge code is outside this extension agent's ownership.
+The extension sends strict `{protocolVersion:1,type:'ping'}` every 20 seconds after ready. The bridge now answers `{protocolVersion:1,type:'pong'}` instead of terminating on the heartbeat frame (fixed; regression-tested in `tests/bridge-server.test.ts`). Live-verified against byui.instructure.com: the full provider poll runs with no disconnects.
 
 Pairing sends the browser-controlled Origin header and body `{protocolVersion:1,code,extensionOrigin:location.origin}`. Both `chrome-extension://ID` and `moz-extension://UUID` are validated. Do not forge Origin from extension JS. If the live browser omits it, coordinate a deliberately reviewed bridge-side policy rather than silently weakening origin checks.
 
