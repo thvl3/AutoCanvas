@@ -171,6 +171,7 @@ const HTML = `<!doctype html>
   const t = q.get("t") ?? "";
   const api = (path, opts) => fetch(path + "?t=" + t, opts);
   const $ = (id) => document.getElementById(id);
+  let booted = false;
 
   function pill(text, cls) { return '<span class="pill ' + cls + '">' + text + "</span>"; }
 
@@ -203,6 +204,11 @@ const HTML = `<!doctype html>
       $("starterr").textContent = d.error;
     } else {
       $("erow").style.display = "none";
+    }
+    if (!booted) {
+      booted = true;
+      pair();
+      mcp();
     }
   }
 
@@ -241,6 +247,7 @@ const HTML = `<!doctype html>
       });
       const d = await r.json();
       if (d.ok) {
+        booted = true;
         refresh();
         pair();
         mcp();

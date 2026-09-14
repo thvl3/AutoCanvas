@@ -18,12 +18,17 @@ export interface InstallResult {
 
 function addToPathWindows(dir: string): boolean {
   // Append the install dir to the per-user (HKCU) PATH via .NET, which handles
-  // REG_SZ/REG_EXPAND_SZ transparently and needs no admin rights.
-  const escaped = dir.replace(/"/g, '\\"');
-  const script =
-    `$p=[Environment]::GetEnvironmentVariable('Path','User'); ` +
-    `if(-not ($p -split ';' | Where-Object { $_ -eq '${escaped}' })) { ` +
-    `[Environment]::SetEnvironmentVariable('Path', ((($p ?? '') + ';${escaped}').TrimStart(';')), 'User') }`;
+  // REG_SZ/REG_EXPAND_SZ transparently and needs no admin rights. Written in
+  // PowerShell 5.1-compatible syntax (no `??`, which only exists in PS 7+).
+  const q = (s: string) => `'${s.replace(/'/g, "''")}'`;
+  const script = [
+    `$p = [Environment]::GetEnvironmentVariable('Path', 'User')`,
+    `if (-not $p) { $p = '' }`,
+    `if (($p -split ';') -notcontains ${q(dir)}) {`,
+    `  if ($p) { $p = $p.TrimEnd(';') + ';' + ${q(dir)} } else { $p = ${q(dir)} }`,
+    `  [Environment]::SetEnvironmentVariable('Path', $p, 'User')`,
+    `}`,
+  ].join("\n");
   try {
     execFileSync(
       "powershell",
