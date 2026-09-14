@@ -388,6 +388,12 @@ export async function startBridge(
       extensionSecret: z.string().max(128),
     })
     .strict();
+  const pingSchema = z
+    .object({
+      protocolVersion: z.literal(1),
+      type: z.literal("ping"),
+    })
+    .strict();
   const alive = new WeakMap<WebSocket, boolean>();
   const heartbeat = setInterval(() => {
     for (const socket of ws.clients) {
@@ -442,6 +448,13 @@ export async function startBridge(
             origin: settings.origin,
           }),
         );
+        return;
+      }
+      // The extension sends a JSON keep-alive ping every twenty seconds so the
+      // MV3 service worker stays awake. Answer it with a JSON pong instead of
+      // failing responseSchema validation and terminating a healthy socket.
+      if (pingSchema.safeParse(input).success) {
+        socket.send(JSON.stringify({ protocolVersion: 1, type: "pong" }));
         return;
       }
       const parsed = responseSchema.safeParse(input);

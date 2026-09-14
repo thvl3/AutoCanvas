@@ -251,6 +251,21 @@ describe("secure loopback bridge", () => {
       vi.useRealTimers();
     }
   });
+  it("answers the extension's JSON keep-alive ping without dropping the socket", async () => {
+    const { server, client, base } = await setup();
+    const socket = await connectExtension(
+      base,
+      await pairExtension(base, server.pairingCode),
+    );
+    const pong = once(socket, "message");
+    socket.send(JSON.stringify({ protocolVersion: 1, type: "ping" }));
+    expect(JSON.parse((await pong)[0].toString())).toEqual({
+      protocolVersion: 1,
+      type: "pong",
+    });
+    expect(await client.status()).toMatchObject({ connected: true });
+    expect(socket.readyState).toBe(WebSocket.OPEN);
+  });
   it("bounds HTTP bodies and outstanding requests", async () => {
     const { server, client, base, settings } = await setup(250);
     const secret = await pairExtension(base, server.pairingCode);
