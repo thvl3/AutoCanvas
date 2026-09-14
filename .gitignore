@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+data/
+workspaces/
+coverage/
+browser-extension/dist-firefox/
+playwright-report/
+test-results/
+*.db
+*.db-*
+*.sqlite*

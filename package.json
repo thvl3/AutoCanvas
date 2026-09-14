@@ -1,0 +1,50 @@
+{
+  "name": "canvas-academic-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local Canvas academic context and planning through MCP",
+  "bin": {
+    "canvas-mcp": "dist/cli/index.js"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "packageManager": "pnpm@9.15.9",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "dev": "tsx src/cli/index.ts",
+    "check": "pnpm typecheck && pnpm test && pnpm build",
+    "smoke": "node scripts/smoke.mjs",
+    "extension:build": "node scripts/build-extension.mjs",
+    "extension:watch": "node scripts/build-extension.mjs --watch",
+    "lint": "prettier --check src tests scripts browser-extension/src package.json tsconfig.json"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "^2.0.0",
+    "@modelcontextprotocol/server": "^2.0.0",
+    "better-sqlite3": "^13.0.3",
+    "commander": "^15.0.0",
+    "dotenv": "^17.4.2",
+    "graphql": "^17.0.2",
+    "pino": "^10.3.1",
+    "turndown": "^7.2.4",
+    "ws": "^8.21.3",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/chrome": "^0.2.9",
+    "@types/node": "^26.5.1",
+    "@types/turndown": "^5.0.6",
+    "@types/ws": "^8.18.1",
+    "esbuild": "^0.28.2",
+    "playwright": "^1.63.0",
+    "prettier": "^3.9.6",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.0"
+  }
+}

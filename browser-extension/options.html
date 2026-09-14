@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>AutoCanvas pairing</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main>
+      <h1>AutoCanvas session bridge</h1>
+      <p>
+        Read-only academic context from a Canvas tab you have already signed in
+        to. No passwords, session cookies or Canvas tokens are exported or
+        stored.
+      </p>
+      <form id="pair-form">
+        <label for="origin">Canvas HTTPS origin</label
+        ><input
+          id="origin"
+          type="url"
+          required
+          autocomplete="off"
+          spellcheck="false"
+          value="https://byui.instructure.com"
+        /><label for="port">Local bridge port</label
+        ><input
+          id="port"
+          type="number"
+          min="1"
+          max="65535"
+          required
+          value="47821"
+        /><label for="code">One-time local bridge pairing code</label
+        ><input
+          id="code"
+          type="text"
+          required
+          maxlength="128"
+          autocomplete="off"
+          spellcheck="false"
+        /><button id="pair" type="submit">
+          Allow this Canvas site and pair
+        </button>
+      </form>
+      <p id="status" role="status" aria-live="polite">
+        Not paired. Start your local bridge, then enter its pairing code.
+      </p>
+      <div class="actions">
+        <button id="refresh" type="button">Refresh status</button
+        ><button id="reconnect" type="button">Reconnect</button>
+      </div>
+      <p class="note">
+        Keep Canvas open in this browser. If your session expires, sign in
+        normally in Canvas and retry. The bridge is restricted to 127.0.0.1.
+        Pairing grants access only to the exact Canvas site above. CDN file
+        redirects fail closed; supported same-origin files are limited to 8 MiB.
+      </p>
+    </main>
+    <script src="options.js" defer></script>
+  </body>
+</html>

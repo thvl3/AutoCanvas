@@ -1,0 +1,67 @@
+body {
+  font:
+    16px/1.5 system-ui,
+    sans-serif;
+  background: #f4f6f8;
+  color: #17202a;
+  margin: 0;
+}
+main {
+  max-width: 640px;
+  margin: 3rem auto;
+  padding: 2rem;
+  background: white;
+  border: 1px solid #ccd3da;
+  border-radius: 10px;
+}
+h1 {
+  font-size: 1.7rem;
+  margin-top: 0;
+}
+label {
+  display: block;
+  margin-top: 1rem;
+  font-weight: 600;
+}
+input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0.65rem;
+  font: inherit;
+  border: 1px solid #667788;
+  border-radius: 4px;
+}
+button {
+  font: inherit;
+  padding: 0.65rem 1rem;
+  margin-top: 1.2rem;
+  cursor: pointer;
+  border: 1px solid #235b91;
+  border-radius: 4px;
+  background: #235b91;
+  color: white;
+}
+button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.actions {
+  display: flex;
+  gap: 1rem;
+}
+.note {
+  font-size: 0.9rem;
+  color: #485766;
+}
+#status {
+  border-left: 4px solid #235b91;
+  padding: 0.7rem;
+  background: #edf4fa;
+  white-space: pre-wrap;
+}
+@media (max-width: 720px) {
+  main {
+    margin: 1rem;
+    padding: 1rem;
+  }
+}

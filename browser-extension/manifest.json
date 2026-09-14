@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "AutoCanvas Session Bridge",
+  "version": "0.1.0",
+  "description": "Read-only Canvas context through your existing signed-in browser session.",
+  "permissions": ["storage", "scripting", "alarms"],
+  "host_permissions": ["http://127.0.0.1/*"],
+  "optional_host_permissions": ["https://*/*"],
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "action": {
+    "default_title": "AutoCanvas pairing and status"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; connect-src http://127.0.0.1:* ws://127.0.0.1:*"
+  }
+}
