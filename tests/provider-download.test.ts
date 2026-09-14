@@ -12,5 +12,5 @@ it('writes browser-acquired bytes with existing safe filenames without any Canva
  await expect(downloadFile(file,directory,config,{acquire:async()=>({bytes:new Uint8Array([4])})})).rejects.toThrow();
  file.id='8';await expect(downloadFile(file,directory,config,{acquire:async()=>({bytes:new Uint8Array(5)})})).rejects.toThrow(/limit/);
  expect(await readdir(root)).toEqual([result.path]);
- }finally{await directory.close();await rm(root,{recursive:true,force:true});}
+ }finally{await directory.handle?.close();await rm(root,{recursive:true,force:true});}
 });

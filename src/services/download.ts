@@ -3,7 +3,7 @@ import { constants } from "node:fs";
 import { open, lstat, unlink, type FileHandle } from "node:fs/promises";
 import type { Config } from "../config.js";
 import type { Entity } from "../domain/types.js";
-import { childPath, requireCanvasId } from "./workspace.js";
+import { childPath, requireCanvasId, type PinnedDirectory } from "./workspace.js";
 
 export type FileAcquirer = (file: Entity, maxBytes: number) => Promise<{bytes: Uint8Array; contentType?: string}>;
 
@@ -75,7 +75,7 @@ function checkedUrl(
 
 /** Delete only this newly created inode, never a replacement entry or symlink target. */
 export async function unlinkOwnedFile(
-  directory: FileHandle,
+  directory: PinnedDirectory,
   name: string,
   file: FileHandle,
 ): Promise<void> {
@@ -88,7 +88,7 @@ export async function unlinkOwnedFile(
 /** Internal metadata-only primitive, never expose a caller-supplied URL/path as an MCP tool. */
 export async function downloadFile(
   file: Entity,
-  directory: FileHandle,
+  directory: PinnedDirectory,
   config: Config,
   dependencies: {
     fetch?: typeof fetch;

@@ -8,7 +8,7 @@ import {
   type FileHandle,
 } from "node:fs/promises";
 import { constants } from "node:fs";
-import { join, resolve, sep } from "node:path";
+import { join, parse, resolve, sep } from "node:path";
 import TurndownService from "turndown";
 import type { Config } from "../config.js";
 import type { AssignmentContext } from "./assignment-context.js";
@@ -23,22 +23,87 @@ export function requireCanvasId(id: string): void {
   if (typeof id !== "string" || !/^[1-9][0-9]{0,30}$/.test(id))
     throw new Error("Invalid Canvas ID");
 }
-export function childPath(directory: FileHandle, name: string): string {
+
+/** A directory pinned against symlink replacement. `handle` is the opened
+ * descriptor on POSIX and null on Windows, which has no descriptor-relative
+ * open and instead relies on the documented path walk in openSafeDirectory. */
+export interface PinnedDirectory {
+  readonly path: string;
+  readonly handle: FileHandle | null;
+}
+
+// Descriptor-relative traversal exists on POSIX through each platform's fd
+// filesystem. Windows has no equivalent, so it uses the path-based walk.
+const FD_PREFIX =
+  process.platform === "linux"
+    ? "/proc/self/fd"
+    : process.platform === "darwin"
+      ? "/dev/fd"
+      : null;
+
+export function childPath(directory: PinnedDirectory, name: string): string {
   if (!name || name === "." || name === ".." || /[/\\\0]/.test(name))
     throw new Error("Unsafe file name");
-  return `/proc/self/fd/${directory.fd}/${name}`;
+  if (FD_PREFIX && directory.handle)
+    return `${FD_PREFIX}/${directory.handle.fd}/${name}`;
+  return join(directory.path, name);
 }
+
+/** The directory's own locator: descriptor-relative on POSIX (symlink-safe for
+ * opendir), the resolved path on Windows. */
+export function directoryPath(directory: PinnedDirectory): string {
+  if (FD_PREFIX && directory.handle)
+    return `${FD_PREFIX}/${directory.handle.fd}`;
+  return directory.path;
+}
+
 export function hasCode(error: unknown, code: string): boolean {
   return error instanceof Error && "code" in error && error.code === code;
 }
-/** Linux/WSL descriptor-relative traversal; fail closed elsewhere, never fall back to racy paths. */
+
+async function openSafeDirectoryWindows(
+  absolute: string,
+  create: boolean,
+): Promise<PinnedDirectory> {
+  const root = parse(absolute).root;
+  if (!root) throw new Error("Workspace requires an absolute path");
+  let current = root;
+  const components = absolute.slice(root.length).split(sep).filter(Boolean);
+  for (const component of components) {
+    if (component === "." || component === ".." || /[/\\\0]/.test(component))
+      throw new Error("Unsafe workspace path");
+    const next = join(current, component);
+    let info = await lstat(next).catch((error: unknown) => {
+      if (create && hasCode(error, "ENOENT")) return null;
+      throw error;
+    });
+    if (info === null) {
+      await mkdir(next, { mode: 0o700 }).catch((error: unknown) => {
+        if (!hasCode(error, "EEXIST")) throw error;
+      });
+      info = await lstat(next);
+    }
+    // Reject symlinks and junctions in the ancestry; compare canonically so a
+    // junction redirect (which realpath resolves) is detected, not followed.
+    if (info.isSymbolicLink() || !info.isDirectory())
+      throw new Error("Workspace ancestry contains a link or non-directory");
+    const canonical = await realpath(next).catch(() => next);
+    if (canonical.toLowerCase() !== next.toLowerCase())
+      throw new Error("Workspace ancestry changed");
+    current = next;
+  }
+  return { path: absolute, handle: null };
+}
+
+/** Linux/macOS: descriptor-relative traversal (symlink-safe). Windows: a
+ * documented path walk with lstat symlink/junction rejection and canonical
+ * comparison. Never falls back to racy path-only traversal on POSIX. */
 export async function openSafeDirectory(
   path: string,
   create = false,
-): Promise<FileHandle> {
-  if (process.platform !== "linux")
-    throw new Error("Secure workspace access requires Linux/WSL with /proc");
+): Promise<PinnedDirectory> {
   const absolute = resolve(path);
+  if (!FD_PREFIX) return openSafeDirectoryWindows(absolute, create);
   let directory = await open(
     "/",
     constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
@@ -46,7 +111,7 @@ export async function openSafeDirectory(
   let expected = "/";
   try {
     for (const component of absolute.split(sep).filter(Boolean)) {
-      const child = childPath(directory, component);
+      const child = `${FD_PREFIX}/${directory.fd}/${component}`;
       if (create)
         await mkdir(child, { mode: 0o700 }).catch((error: unknown) => {
           if (!hasCode(error, "EEXIST")) throw error;
@@ -58,15 +123,16 @@ export async function openSafeDirectory(
       await directory.close();
       directory = next;
       expected = join(expected, component);
-      if ((await realpath(`/proc/self/fd/${directory.fd}`)) !== expected)
+      if ((await realpath(`${FD_PREFIX}/${directory.fd}`)) !== expected)
         throw new Error("Workspace ancestry changed");
     }
-    return directory;
+    return { path: expected, handle: directory };
   } catch (error) {
     await directory.close();
     throw error;
   }
 }
+
 export async function workspacePath(
   root: string,
   courseId: string,
@@ -80,7 +146,8 @@ export async function workspacePath(
     `assignment-${assignmentId}`,
   );
   try {
-    await (await openSafeDirectory(path)).close();
+    const directory = await openSafeDirectory(path);
+    await directory.handle?.close();
   } catch (error) {
     if (!hasCode(error, "ENOENT")) throw error;
   }
@@ -135,7 +202,7 @@ function rubricMarkdown(value: unknown): string {
   return untrustedMarkdown(value);
 }
 interface OwnedEntry {
-  parent: FileHandle;
+  parent: PinnedDirectory;
   name: string;
   dev: number;
   ino: number;
@@ -191,39 +258,49 @@ export async function prepareWorkspace(
     ),
     true,
   );
-  const handles: FileHandle[] = [course];
-  const directoryPaths = new Map<FileHandle, string>([
-    [
-      course,
-      join(
-        resolve(config.workspaceRoot),
-        `course-${context.assignment.course_id}`,
-      ),
-    ],
-  ]);
+  const handles: FileHandle[] = [];
+  if (course.handle) handles.push(course.handle);
+  const directories: Array<{
+    pinned: PinnedDirectory;
+    dev: number;
+    ino: number;
+  }> = [];
   const owned: OwnedEntry[] = [];
   const files: string[] = [];
   const warnings = [
     ...context.warnings,
     "Workspace contains untrusted cached content. No files are executed and submission is disabled.",
   ];
-  async function makeDirectory(
-    parent: FileHandle,
+  async function recordDirectory(
+    pinned: PinnedDirectory,
+    parent: PinnedDirectory,
     name: string,
-  ): Promise<FileHandle> {
-    await mkdir(childPath(parent, name), { mode: 0o700 }); // EEXIST is intentional; never reuse a workspace.
-    const handle = await open(
-      childPath(parent, name),
-      constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
-    );
-    handles.push(handle);
-    directoryPaths.set(handle, join(directoryPaths.get(parent)!, name));
-    const stat = await handle.stat();
-    owned.push({ parent, name, dev: stat.dev, ino: stat.ino, directory: true });
-    return handle;
+  ): Promise<void> {
+    const info = pinned.handle ? await pinned.handle.stat() : await lstat(pinned.path);
+    if (info.isSymbolicLink() || !info.isDirectory())
+      throw new Error("Workspace directory is not a real directory");
+    directories.push({ pinned, dev: info.dev, ino: info.ino });
+    owned.push({ parent, name, dev: info.dev, ino: info.ino, directory: true });
+  }
+  async function makeDirectory(
+    parent: PinnedDirectory,
+    name: string,
+  ): Promise<PinnedDirectory> {
+    const target = childPath(parent, name);
+    await mkdir(target, { mode: 0o700 }); // EEXIST is intentional; never reuse a workspace.
+    const handle = FD_PREFIX
+      ? await open(
+          target,
+          constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
+        )
+      : null;
+    if (handle) handles.push(handle);
+    const pinned = { path: join(parent.path, name), handle };
+    await recordDirectory(pinned, parent, name);
+    return pinned;
   }
   async function makeFile(
-    parent: FileHandle,
+    parent: PinnedDirectory,
     name: string,
     content: string,
   ): Promise<void> {
@@ -250,6 +327,10 @@ export async function prepareWorkspace(
     }
   }
   try {
+    const courseInfo = course.handle
+      ? await course.handle.stat()
+      : await lstat(course.path);
+    directories.push({ pinned: course, dev: courseInfo.dev, ino: courseInfo.ino });
     const directory = await makeDirectory(
       course,
       `assignment-${context.assignment.id}`,
@@ -282,18 +363,10 @@ export async function prepareWorkspace(
       JSON.stringify(mapping, null, 2) + "\n",
     );
     files.push("resources/FILES.json");
-    for (const [handle, expected] of directoryPaths) {
-      if ((await realpath(`/proc/self/fd/${handle.fd}`)) !== expected)
+    for (const { pinned, dev, ino } of directories) {
+      const info = await lstat(pinned.path).catch(() => null);
+      if (!info || info.isSymbolicLink() || info.dev !== dev || info.ino !== ino)
         throw new Error("Workspace directory changed during preparation.");
-      const current = await openSafeDirectory(expected);
-      try {
-        const before = await handle.stat();
-        const after = await current.stat();
-        if (before.dev !== after.dev || before.ino !== after.ino)
-          throw new Error("Workspace directory changed during preparation.");
-      } finally {
-        await current.close();
-      }
     }
     return { workspace, files, warnings };
   } catch (error) {

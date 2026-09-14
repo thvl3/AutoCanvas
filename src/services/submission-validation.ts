@@ -5,6 +5,7 @@ import type { Config } from "../config.js";
 import type { AssignmentContext } from "./assignment-context.js";
 import {
   childPath,
+  directoryPath,
   openSafeDirectory,
   untrustedMarkdown,
   workspacePath,
@@ -37,7 +38,7 @@ async function inspectSubmission(
   const maxBytes = Math.min(config.maxDownloadBytes, 10 * 1024 * 1024);
   let total = 0;
   try {
-    const entries = await opendir(`/proc/self/fd/${directory.fd}`);
+    const entries = await opendir(directoryPath(directory));
     for await (const entry of entries) {
       if (files.length >= 100)
         throw new InspectionError(
@@ -102,7 +103,7 @@ async function inspectSubmission(
       }
     }
   } finally {
-    await directory.close();
+    await directory.handle?.close();
   }
   if (!files.length || files.every((file) => file.size === 0))
     throw new InspectionError("No nonempty submission files found.");
@@ -352,7 +353,7 @@ export async function validateAssignment(
       context.assignment.course_id ?? "",
       context.assignment.id,
     );
-    await (await openSafeDirectory(path)).close();
+    await (await openSafeDirectory(path)).handle?.close();
     checks.push({
       check: "workspace",
       status: "PASS",

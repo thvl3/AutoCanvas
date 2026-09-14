@@ -8,7 +8,7 @@ Normal use relies on your existing Canvas browser login. No Canvas personal acce
 
 - Node.js 22.12+, pnpm 9.15.9
 - Firefox or a Chromium browser with an authenticated Canvas tab
-- Linux/WSL for workspace creation and validation, which use `/proc` directory handles
+- Linux, macOS, or Windows. Workspace creation uses descriptor-relative traversal on Linux/macOS and a documented path walk on Windows; no `/proc` or WSL is required.
 - A C/C++ build toolchain and Python 3 if SQLite's native binding needs compilation
 
 ## Setup

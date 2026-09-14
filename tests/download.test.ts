@@ -88,7 +88,7 @@ describe("metadata-only downloads", () => {
         expect(created).toBe(0);
         expect(await readdir(root)).toEqual([]);
       } finally {
-        await directory.close();
+        await directory.handle?.close();
       }
     },
   );
@@ -122,7 +122,7 @@ describe("metadata-only downloads", () => {
         ).rejects.toThrow(/limit|HTTP/i);
         expect(await readdir(root)).toEqual([]);
       } finally {
-        await directory.close();
+        await directory.handle?.close();
       }
     },
   );
@@ -152,7 +152,7 @@ describe("metadata-only downloads", () => {
         );
         expect(await readdir(root)).toEqual([]);
       } finally {
-        await directory.close();
+        await directory.handle?.close();
       }
     },
     1500,
@@ -185,7 +185,7 @@ describe("metadata-only downloads", () => {
           "user-owned",
         );
       } finally {
-        await directory.close();
+        await directory.handle?.close();
       }
     },
   );
@@ -208,7 +208,7 @@ describe("metadata-only downloads", () => {
       expect(message).toContain("Download");
       expect(await readdir(root)).toEqual([]);
     } finally {
-      await directory.close();
+      await directory.handle?.close();
     }
   });
   it.each([
@@ -251,7 +251,7 @@ describe("metadata-only downloads", () => {
         expect(calls).toBe(0);
         expect(await readdir(root)).toEqual([]);
       } finally {
-        await directory.close();
+        await directory.handle?.close();
       }
     },
   );
@@ -291,7 +291,7 @@ describe("metadata-only downloads", () => {
       expect(seen.every((item) => item.redirect === "manual")).toBe(true);
       expect(result.source).toBe("https://cdn.example/opaque");
     } finally {
-      await directory.close();
+      await directory.handle?.close();
     }
   });
   it("rejects a same-origin redirect to non-file APIs", async () => {
@@ -313,7 +313,7 @@ describe("metadata-only downloads", () => {
       expect(calls).toBe(1);
       expect(await readdir(root)).toEqual([]);
     } finally {
-      await directory.close();
+      await directory.handle?.close();
     }
   });
   it("downloads exact binary fixture bytes with native fetch, GET and same-origin bearer", async () => {
@@ -350,7 +350,7 @@ describe("metadata-only downloads", () => {
         { method: "GET", auth: "Bearer private-token" },
       ]);
     } finally {
-      await directory.close();
+      await directory.handle?.close();
     }
   });
 });
